@@ -7,6 +7,8 @@ from autogen_agentchat.teams import SelectorGroupChat
 from autogen_agentchat.conditions import TextMentionTermination
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
+from dndbots.campaign import Campaign
+from dndbots.events import GameEvent, EventType
 from dndbots.models import Character
 from dndbots.prompts import build_dm_prompt, build_player_prompt
 
@@ -89,6 +91,7 @@ class DnDGame:
         characters: list[Character],
         dm_model: str = "gpt-4o",
         player_model: str = "gpt-4o",
+        campaign: Campaign | None = None,
     ):
         """Initialize a game session.
 
@@ -97,9 +100,11 @@ class DnDGame:
             characters: List of player characters
             dm_model: Model for DM agent
             player_model: Model for player agents
+            campaign: Optional campaign for persistence
         """
         self.scenario = scenario
         self.characters = characters
+        self.campaign = campaign
 
         # Create agents
         self.dm = create_dm_agent(scenario, dm_model)
@@ -137,3 +142,19 @@ class DnDGame:
             # Print each message as it comes
             if hasattr(message, 'source') and hasattr(message, 'content'):
                 print(f"\n[{message.source}]: {message.content}")
+
+                # Record event if campaign is set
+                if self.campaign:
+                    # Determine event type based on source
+                    if message.source == "dm":
+                        event_type = EventType.DM_NARRATION
+                    else:
+                        event_type = EventType.PLAYER_ACTION
+
+                    event = GameEvent(
+                        event_type=event_type,
+                        source=message.source,
+                        content=message.content,
+                        session_id=self.campaign.current_session_id or "unknown",
+                    )
+                    await self.campaign.record_event(event)
