@@ -1,0 +1,130 @@
+"""Game loop orchestration using AutoGen 0.4."""
+
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.teams import SelectorGroupChat
+from autogen_agentchat.conditions import TextMentionTermination
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+from dndbots.models import Character
+from dndbots.prompts import build_dm_prompt, build_player_prompt
+
+
+def create_dm_agent(
+    scenario: str,
+    model: str = "gpt-4o",
+) -> AssistantAgent:
+    """Create the Dungeon Master agent.
+
+    Args:
+        scenario: The adventure scenario
+        model: OpenAI model to use
+
+    Returns:
+        Configured DM agent
+    """
+    model_client = OpenAIChatCompletionClient(model=model)
+
+    return AssistantAgent(
+        name="dm",
+        model_client=model_client,
+        system_message=build_dm_prompt(scenario),
+    )
+
+
+def create_player_agent(
+    character: Character,
+    model: str = "gpt-4o",
+) -> AssistantAgent:
+    """Create a player agent for a character.
+
+    Args:
+        character: The character to play
+        model: OpenAI model to use
+
+    Returns:
+        Configured player agent
+    """
+    model_client = OpenAIChatCompletionClient(model=model)
+
+    return AssistantAgent(
+        name=character.name,
+        model_client=model_client,
+        system_message=build_player_prompt(character),
+    )
+
+
+def dm_selector(messages) -> str | None:
+    """Custom selector: DM controls turn order.
+
+    After any player speaks, return to DM.
+    DM decides who goes next by addressing them.
+    """
+    if not messages:
+        return "dm"
+
+    last_speaker = messages[-1].source
+
+    # After player speaks, always return to DM
+    if last_speaker != "dm":
+        return "dm"
+
+    # DM just spoke - let the model selector figure out who was addressed
+    return None
+
+
+class DnDGame:
+    """Orchestrates a D&D game session."""
+
+    def __init__(
+        self,
+        scenario: str,
+        characters: list[Character],
+        dm_model: str = "gpt-4o",
+        player_model: str = "gpt-4o",
+    ):
+        """Initialize a game session.
+
+        Args:
+            scenario: The adventure scenario
+            characters: List of player characters
+            dm_model: Model for DM agent
+            player_model: Model for player agents
+        """
+        self.scenario = scenario
+        self.characters = characters
+
+        # Create agents
+        self.dm = create_dm_agent(scenario, dm_model)
+        self.players = [
+            create_player_agent(char, player_model)
+            for char in characters
+        ]
+
+        # Build participant list (DM first)
+        participants = [self.dm] + self.players
+
+        # Create the group chat with DM-controlled selection
+        self.team = SelectorGroupChat(
+            participants=participants,
+            model_client=OpenAIChatCompletionClient(model=dm_model),
+            selector_func=dm_selector,
+            termination_condition=TextMentionTermination("SESSION PAUSE"),
+        )
+
+    async def run(self, max_turns: int = 20) -> None:
+        """Run the game session.
+
+        Args:
+            max_turns: Maximum turns before auto-pause
+        """
+        # Start with DM setting the scene
+        initial_message = (
+            f"Begin the adventure. Set the scene for the party: "
+            f"{', '.join(c.name for c in self.characters)}. "
+            f"Describe where they are and what they see."
+        )
+
+        async for message in self.team.run_stream(task=initial_message):
+            # Print each message as it comes
+            if hasattr(message, 'source') and hasattr(message, 'content'):
+                print(f"\n[{message.source}]: {message.content}")
