@@ -132,7 +132,7 @@ class SQLiteStore:
             ORDER BY timestamp ASC
         """
         if limit:
-            query += f" LIMIT {limit}"
+            query += f" LIMIT {int(limit)}"
 
         async with self._conn.execute(query, (session_id,)) as cursor:
             rows = await cursor.fetchall()
