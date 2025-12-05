@@ -162,3 +162,67 @@ class TestMemoryProjection:
 
         assert "evt_001" in memory
         assert "evt_002" not in memory  # Throk wasn't there
+
+
+class TestMemoryDocument:
+    def test_build_full_memory_document(self):
+        """Full memory doc has lexicon + PC memory."""
+        char = Character(
+            name="Throk",
+            char_class="Fighter",
+            level=1,
+            hp=8, hp_max=8, ac=5,
+            stats=Stats(str=16, dex=12, con=14, int=9, wis=10, cha=11),
+            equipment=["longsword"],
+            gold=25,
+        )
+        char.__dict__['char_id'] = "pc_throk_001"
+
+        builder = MemoryBuilder()
+        doc = builder.build_memory_document(
+            pc_id="pc_throk_001",
+            character=char,
+            all_characters=[char],
+            events=[],
+        )
+
+        assert "## LEXICON" in doc
+        assert "[PC:pc_throk_001:Throk]" in doc
+        assert "## MEMORY_pc_throk_001" in doc
+
+    def test_memory_document_token_estimate(self):
+        """Memory documents should stay under token budget."""
+        char = Character(
+            name="Throk",
+            char_class="Fighter",
+            level=1,
+            hp=8, hp_max=8, ac=5,
+            stats=Stats(str=16, dex=12, con=14, int=9, wis=10, cha=11),
+            equipment=["longsword"],
+            gold=25,
+        )
+
+        # Simulate 10 events
+        events = [
+            GameEvent(
+                event_id=f"evt_{i:03d}",
+                event_type=EventType.PLAYER_ACTION,
+                source="pc_throk_001",
+                content=f"Action {i} " * 20,  # ~80 chars each
+                session_id="s1",
+                metadata={"participants": ["pc_throk_001"]}
+            )
+            for i in range(10)
+        ]
+
+        builder = MemoryBuilder()
+        doc = builder.build_memory_document(
+            pc_id="pc_throk_001",
+            character=char,
+            all_characters=[char],
+            events=events,
+        )
+
+        # Rough estimate: 4 chars per token
+        estimated_tokens = len(doc) / 4
+        assert estimated_tokens < 2000  # Should fit easily

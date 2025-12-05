@@ -149,3 +149,43 @@ class MemoryBuilder:
                 lines.append("")
 
         return "\n".join(lines)
+
+    def build_memory_document(
+        self,
+        pc_id: str,
+        character: Character,
+        all_characters: list[Character],
+        events: list[GameEvent],
+        npcs: list[dict[str, Any]] | None = None,
+        locations: list[dict[str, Any]] | None = None,
+        party_id: str | None = None,
+    ) -> str:
+        """Build complete DCML memory document for a PC.
+
+        Structure:
+        - ## LEXICON (all known entities)
+        - ## MEMORY_<pc_id> (filtered, subjective view)
+
+        Returns:
+            Combined document in format "## LEXICON\\n...\\n\\n## MEMORY_pc_id\\n..."
+        """
+        sections = []
+
+        # Build lexicon from all known entities
+        lexicon = self.build_lexicon(
+            characters=all_characters,
+            npcs=npcs,
+            locations=locations,
+        )
+        sections.append(lexicon)
+
+        # Build PC-specific memory
+        memory = self.build_pc_memory(
+            pc_id=pc_id,
+            character=character,
+            events=events,
+            party_id=party_id,
+        )
+        sections.append(memory)
+
+        return "\n\n".join(sections)
