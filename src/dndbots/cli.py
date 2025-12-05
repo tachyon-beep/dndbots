@@ -67,7 +67,7 @@ def main() -> None:
 
     # Run the game
     try:
-        asyncio.run(game.run(max_turns=20))
+        asyncio.run(game.run())
     except KeyboardInterrupt:
         print("\n\n[System] Session interrupted by user.")
 
