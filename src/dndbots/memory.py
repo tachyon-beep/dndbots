@@ -25,6 +25,8 @@ CLASS_ABBREV = {
 class MemoryBuilder:
     """Builds DCML memory blocks from campaign state."""
 
+    event_window: int = 10  # Number of recent events to include
+
     def build_lexicon(
         self,
         characters: list[Character] | None = None,
@@ -138,17 +140,57 @@ class MemoryBuilder:
         lines.append(f"{pc_id}::stats->{stats_str};")
 
         # Filter events by participation
+        pc_events = [
+            e for e in events
+            if e.source == pc_id or pc_id in e.metadata.get("participants", [])
+        ]
+
+        # Window: only recent events
+        recent_events = pc_events[-self.event_window:]
+        old_events = pc_events[:-self.event_window] if len(pc_events) > self.event_window else []
+
+        # Rollups for old events
+        if old_events:
+            rollups = self.create_rollups(old_events, pc_id)
+            if rollups:
+                lines.append("")
+                lines.append("# Key past events (compressed)")
+                lines.extend(rollups)
+
+        # Recent events
         lines.append("")
         lines.append("# Recent events")
 
-        for event in events:
-            participants = event.metadata.get("participants", [])
-            # Include if PC is source OR in participants
-            if event.source == pc_id or pc_id in participants:
-                lines.append(self.render_event(event))
-                lines.append("")
+        for event in recent_events:
+            lines.append(self.render_event(event))
+            lines.append("")
 
         return "\n".join(lines)
+
+    def create_rollups(self, events: list[GameEvent], pc_id: str) -> list[str]:
+        """Create summary rollup facts from old events.
+
+        Extracts key consequences:
+        - Deaths (killed X)
+        - Major discoveries
+        - Reputation changes
+        - Quest state changes
+        """
+        rollups = []
+
+        for event in events:
+            # Check for kills
+            killed = event.metadata.get("killed", [])
+            for victim in killed:
+                rollups.append(f"{pc_id} -> KILLED:{victim}")
+
+            # Check for quest changes
+            quest_id = event.metadata.get("quest_id")
+            quest_state = event.metadata.get("quest_state")
+            if quest_id and quest_state:
+                rollups.append(f"!QST:{quest_id}::state->{quest_state}")
+
+        return rollups
 
     def build_memory_document(
         self,

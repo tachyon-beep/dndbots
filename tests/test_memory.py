@@ -226,3 +226,58 @@ class TestMemoryDocument:
         # Rough estimate: 4 chars per token
         estimated_tokens = len(doc) / 4
         assert estimated_tokens < 2000  # Should fit easily
+
+
+class TestEventWindowing:
+    def test_recent_events_limited_to_window(self):
+        """Only last N events included in memory."""
+        events = [
+            GameEvent(
+                event_id=f"evt_{i:03d}",
+                event_type=EventType.PLAYER_ACTION,
+                source="pc_throk_001",
+                content=f"Action {i}",
+                session_id="s1",
+                metadata={"participants": ["pc_throk_001"]}
+            )
+            for i in range(20)
+        ]
+
+        builder = MemoryBuilder(event_window=5)
+        memory = builder.build_pc_memory(
+            pc_id="pc_throk_001",
+            character=Character(
+                name="Throk", char_class="Fighter", level=1,
+                hp=8, hp_max=8, ac=5,
+                stats=Stats(str=16, dex=12, con=14, int=9, wis=10, cha=11),
+                equipment=[], gold=0,
+            ),
+            events=events,
+        )
+
+        # Should only have last 5 events
+        assert "evt_019" in memory
+        assert "evt_015" in memory
+        assert "evt_010" not in memory  # Too old
+
+    def test_rollup_for_old_events(self):
+        """Old events get rolled up into summary facts."""
+        old_events = [
+            GameEvent(
+                event_id="evt_old_001",
+                event_type=EventType.DEATH,
+                source="dm",
+                content="Killed Grimfang the goblin chief",
+                session_id="s1",
+                metadata={
+                    "participants": ["pc_throk_001"],
+                    "killed": ["npc_grimfang_001"],
+                }
+            ),
+        ]
+
+        builder = MemoryBuilder(event_window=5)
+        rollups = builder.create_rollups(old_events, "pc_throk_001")
+
+        assert len(rollups) > 0
+        assert "grimfang" in rollups[0].lower() or "killed" in rollups[0].lower()
