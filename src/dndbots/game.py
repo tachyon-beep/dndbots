@@ -1,5 +1,7 @@
 """Game loop orchestration using AutoGen 0.4."""
 
+from typing import Sequence
+
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.teams import SelectorGroupChat
 from autogen_agentchat.conditions import TextMentionTermination
@@ -53,11 +55,17 @@ def create_player_agent(
     )
 
 
-def dm_selector(messages) -> str | None:
+def dm_selector(messages: Sequence) -> str | None:
     """Custom selector: DM controls turn order.
 
     After any player speaks, return to DM.
     DM decides who goes next by addressing them.
+
+    Args:
+        messages: Sequence of messages in the conversation
+
+    Returns:
+        Agent name to speak next, or None to use model-based selection
     """
     if not messages:
         return "dm"
@@ -111,11 +119,12 @@ class DnDGame:
             termination_condition=TextMentionTermination("SESSION PAUSE"),
         )
 
-    async def run(self, max_turns: int = 20) -> None:
+    async def run(self) -> None:
         """Run the game session.
 
-        Args:
-            max_turns: Maximum turns before auto-pause
+        Note:
+            Phase 1 uses "SESSION PAUSE" termination condition.
+            Turn counting/max_turns will be added in a future phase if needed.
         """
         # Start with DM setting the scene
         initial_message = (

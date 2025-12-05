@@ -2,8 +2,9 @@
 
 import os
 import pytest
+from unittest.mock import Mock
 
-from dndbots.game import create_dm_agent, create_player_agent, DnDGame
+from dndbots.game import create_dm_agent, create_player_agent, DnDGame, dm_selector
 from dndbots.models import Character, Stats
 
 
@@ -39,6 +40,27 @@ class TestAgentCreation:
             model="gpt-4o-mini",
         )
         assert agent.name == "Throk"
+
+
+class TestDmSelector:
+    def test_dm_selector_empty_messages_returns_dm(self):
+        """When no messages, DM should start."""
+        result = dm_selector([])
+        assert result == "dm"
+
+    def test_dm_selector_after_player_returns_dm(self):
+        """After player speaks, control returns to DM."""
+        mock_message = Mock()
+        mock_message.source = "Throk"
+        result = dm_selector([mock_message])
+        assert result == "dm"
+
+    def test_dm_selector_after_dm_returns_none(self):
+        """After DM speaks, let model selector determine next speaker."""
+        mock_message = Mock()
+        mock_message.source = "dm"
+        result = dm_selector([mock_message])
+        assert result is None
 
 
 class TestDnDGame:
