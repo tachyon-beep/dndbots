@@ -1,7 +1,7 @@
 """Game event schemas for persistence."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -29,7 +29,7 @@ class GameEvent:
     source: str  # "dm", "system", or character UID like "pc_throk_001"
     content: str
     session_id: str
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: dict[str, Any] = field(default_factory=dict)
     event_id: str | None = None  # Set by storage layer
 

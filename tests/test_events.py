@@ -1,8 +1,5 @@
 """Tests for game event schemas."""
 
-import pytest
-from datetime import datetime
-
 from dndbots.events import GameEvent, EventType
 
 
