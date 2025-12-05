@@ -1,7 +1,7 @@
 """Tests for DCML (D&D Condensed Memory Language)."""
 
 import pytest
-from dndbots.dcml import DCMLCategory, render_lexicon_entry, render_relation, DCMLOp
+from dndbots.dcml import DCMLCategory, render_lexicon_entry, render_relation, DCMLOp, render_properties
 
 
 class TestDCMLEntity:
@@ -56,3 +56,29 @@ class TestDCMLRelations:
         """<- operator for origin."""
         rel = render_relation("fac_mages_guild", DCMLOp.CAUSED_BY, "race_elves")
         assert rel == "fac_mages_guild <- race_elves"
+
+
+class TestDCMLProperties:
+    def test_render_simple_properties(self):
+        """Properties use ::key->value format."""
+        props = render_properties("pc_throk_001", {"class": "FTR", "level": 3})
+        assert props == "pc_throk_001::class->FTR,level->3"
+
+    def test_render_stats_properties(self):
+        """Stats can be rendered compactly."""
+        props = render_properties("pc_throk_001", {
+            "stats": "STR17,DEX12,CON15,INT8,WIS10,CHA9"
+        })
+        assert props == "pc_throk_001::stats->STR17,DEX12,CON15,INT8,WIS10,CHA9"
+
+    def test_render_hp_delta(self):
+        """HP changes use hpD notation."""
+        props = render_properties("pc_throk_001", {"hpD": -12})
+        assert props == "pc_throk_001::hpD->-12"
+
+    def test_render_tags(self):
+        """Tags are comma-separated."""
+        props = render_properties("pc_throk_001", {
+            "tags": ["reckless", "protective"]
+        })
+        assert props == 'pc_throk_001::tags->"reckless","protective"'

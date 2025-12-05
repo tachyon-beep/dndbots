@@ -50,3 +50,20 @@ def render_lexicon_entry(category: DCMLCategory, uid: str, name: str) -> str:
 def render_relation(subject: str, op: DCMLOp, obj: str) -> str:
     """Render a relation in 'subject OP object' format."""
     return f"{subject} {op.value} {obj}"
+
+
+def render_properties(subject: str, props: dict[str, Any]) -> str:
+    """Render properties in subject::key->value,key->value format.
+
+    Lists are formatted with quoted values: tags->"a","b"
+    """
+    parts = []
+    for key, value in props.items():
+        if isinstance(value, list):
+            # Tags and lists get quoted
+            formatted = ",".join(f'"{v}"' for v in value)
+        else:
+            formatted = str(value)
+        parts.append(f"{key}->{formatted}")
+
+    return f"{subject}::{','.join(parts)}"
