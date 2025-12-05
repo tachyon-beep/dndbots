@@ -32,10 +32,6 @@ class Neo4jStore:
                 CREATE INDEX loc_id IF NOT EXISTS
                 FOR (l:Location) ON (l.location_id)
             """)
-            await session.run("""
-                CREATE INDEX campaign_id IF NOT EXISTS
-                FOR (n) ON (n.campaign_id)
-            """)
 
     async def close(self) -> None:
         """Close the driver connection."""
@@ -167,17 +163,17 @@ class Neo4jStore:
             rel_type: Optional relationship type filter
             direction: "outgoing", "incoming", or "both"
         """
-        if direction == "outgoing":
-            pattern = "(c)-[r]->(target)"
-        elif direction == "incoming":
-            pattern = "(c)<-[r]-(target)"
-        else:
-            pattern = "(c)-[r]-(target)"
-
         type_filter = f":{rel_type}" if rel_type else ""
 
+        if direction == "outgoing":
+            pattern = f"-[r{type_filter}]->(target)"
+        elif direction == "incoming":
+            pattern = f"<-[r{type_filter}]-(target)"
+        else:
+            pattern = f"-[r{type_filter}]-(target)"
+
         query = f"""
-            MATCH (c:Character {{char_id: $char_id}}){pattern.replace('[r]', f'[r{type_filter}]')}
+            MATCH (c:Character {{char_id: $char_id}}){pattern}
             RETURN type(r) as rel_type, properties(r) as rel_props,
                    target.name as target_name,
                    coalesce(target.char_id, target.location_id) as target_id
