@@ -2,12 +2,18 @@
 
 import asyncio
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 
+from dndbots.campaign import Campaign
 from dndbots.game import DnDGame
 from dndbots.models import Character, Stats
 
+
+# Default paths
+DATA_DIR = Path.home() / ".dndbots"
+DEFAULT_DB = DATA_DIR / "campaigns.db"
 
 # Default test scenario
 DEFAULT_SCENARIO = """
@@ -40,6 +46,51 @@ def create_default_character() -> Character:
     )
 
 
+async def run_game() -> None:
+    """Run the game with persistence."""
+    # Ensure data directory exists
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Initialize campaign
+    campaign = Campaign(
+        campaign_id="default_campaign",
+        name="Caves of Chaos",
+        db_path=str(DEFAULT_DB),
+    )
+    await campaign.initialize()
+
+    try:
+        # Get or create character
+        characters = await campaign.get_characters()
+        if not characters:
+            char = create_default_character()
+            await campaign.add_character(char)
+            characters = [char]
+
+        # Start session
+        await campaign.start_session()
+
+        print(f"Campaign: {campaign.name}")
+        print(f"Session: {campaign.current_session_id}")
+        print(f"Characters: {', '.join(c.name for c in characters)}")
+        print()
+
+        # Create and run game
+        game = DnDGame(
+            scenario=DEFAULT_SCENARIO,
+            characters=characters,
+            dm_model="gpt-4o",
+            player_model="gpt-4o",
+            campaign=campaign,
+        )
+
+        await game.run()
+
+    finally:
+        await campaign.end_session("Session interrupted")
+        await campaign.close()
+
+
 def main() -> None:
     """Run a test game session."""
     # Load environment variables
@@ -53,21 +104,12 @@ def main() -> None:
     print("=" * 60)
     print("DnDBots - Basic D&D AI Campaign")
     print("=" * 60)
-    print("\nStarting test session with 1 player (Throk the Fighter)")
+    print(f"\nData directory: {DATA_DIR}")
     print("Type Ctrl+C to stop\n")
-
-    # Create game
-    character = create_default_character()
-    game = DnDGame(
-        scenario=DEFAULT_SCENARIO,
-        characters=[character],
-        dm_model="gpt-4o",
-        player_model="gpt-4o",
-    )
 
     # Run the game
     try:
-        asyncio.run(game.run())
+        asyncio.run(run_game())
     except KeyboardInterrupt:
         print("\n\n[System] Session interrupted by user.")
 
