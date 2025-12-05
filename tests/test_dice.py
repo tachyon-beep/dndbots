@@ -1,6 +1,6 @@
 """Tests for dice rolling utilities."""
 
-import re
+import pytest
 
 from dndbots.dice import roll, parse_roll
 
@@ -20,6 +20,18 @@ class TestRoll:
         for _ in range(100):
             result = roll(1, 20, modifier=5)
             assert 6 <= result <= 25
+
+    def test_roll_raises_on_invalid_dice(self):
+        with pytest.raises(ValueError, match="Invalid dice parameters: dice=0"):
+            roll(0, 6)
+
+    def test_roll_raises_on_invalid_sides(self):
+        with pytest.raises(ValueError, match="Invalid dice parameters: .* sides=0"):
+            roll(2, 0)
+
+    def test_roll_raises_on_negative_dice(self):
+        with pytest.raises(ValueError, match="Invalid dice parameters: dice=-1"):
+            roll(-1, 6)
 
 
 class TestParseRoll:

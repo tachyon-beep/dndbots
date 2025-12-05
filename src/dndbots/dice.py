@@ -21,7 +21,12 @@ def roll(dice: int, sides: int, modifier: int = 0) -> int:
 
     Returns:
         Total of all dice plus modifier
+
+    Raises:
+        ValueError: If dice or sides are less than 1
     """
+    if dice < 1 or sides < 1:
+        raise ValueError(f"Invalid dice parameters: dice={dice}, sides={sides}")
     total = sum(random.randint(1, sides) for _ in range(dice))
     return total + modifier
 
