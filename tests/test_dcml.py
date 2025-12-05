@@ -1,7 +1,15 @@
 """Tests for DCML (D&D Condensed Memory Language)."""
 
 import pytest
-from dndbots.dcml import DCMLCategory, render_lexicon_entry, render_relation, DCMLOp, render_properties
+from dndbots.dcml import (
+    DCMLCategory,
+    render_lexicon_entry,
+    render_relation,
+    DCMLOp,
+    render_properties,
+    render_fact,
+    Certainty,
+)
 
 
 class TestDCMLEntity:
@@ -82,3 +90,20 @@ class TestDCMLProperties:
             "tags": ["reckless", "protective"]
         })
         assert props == 'pc_throk_001::tags->"reckless","protective"'
+
+
+class TestDCMLEpistemics:
+    def test_render_fact_certain(self):
+        """No prefix for canonical facts."""
+        line = render_fact("pc_throk_001 in fac_party_001", Certainty.FACT)
+        assert line == "pc_throk_001 in fac_party_001"
+
+    def test_render_fact_belief(self):
+        """! prefix for in-world beliefs (may be wrong)."""
+        line = render_fact("npc_elena_001 ~ fac_resistance", Certainty.BELIEF)
+        assert line == "!npc_elena_001 ~ fac_resistance"
+
+    def test_render_fact_rumor(self):
+        """? prefix for rumors/unconfirmed."""
+        line = render_fact("npc_unknown_master::role->patron", Certainty.RUMOR)
+        assert line == "?npc_unknown_master::role->patron"

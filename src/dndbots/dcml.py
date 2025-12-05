@@ -67,3 +67,15 @@ def render_properties(subject: str, props: dict[str, Any]) -> str:
         parts.append(f"{key}->{formatted}")
 
     return f"{subject}::{','.join(parts)}"
+
+
+class Certainty(Enum):
+    """Epistemic status markers for DCML facts."""
+    FACT = ""       # Canonical, objective truth
+    BELIEF = "!"    # In-world belief (may be inaccurate)
+    RUMOR = "?"     # Myth, legend, or unconfirmed
+
+
+def render_fact(statement: str, certainty: Certainty = Certainty.FACT) -> str:
+    """Render a statement with epistemic marker prefix."""
+    return f"{certainty.value}{statement}"
