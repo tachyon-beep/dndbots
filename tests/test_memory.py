@@ -87,3 +87,78 @@ class TestEventRenderer:
 
         assert "EVT:evt_003_048" in dcml
         assert "search" in dcml.lower() or "loot" in dcml.lower()
+
+
+class TestMemoryProjection:
+    def test_build_pc_memory_includes_header(self):
+        """PC memory has ## MEMORY_<id> header."""
+        builder = MemoryBuilder()
+        memory = builder.build_pc_memory(
+            pc_id="pc_throk_001",
+            character=Character(
+                name="Throk",
+                char_class="Fighter",
+                level=3,
+                hp=24, hp_max=24, ac=5,
+                stats=Stats(str=17, dex=12, con=15, int=8, wis=10, cha=9),
+                equipment=["longsword", "chain mail"],
+                gold=50,
+            ),
+            events=[],
+        )
+
+        assert "## MEMORY_pc_throk_001" in memory
+
+    def test_build_pc_memory_includes_core_facts(self):
+        """PC memory includes class, level, key traits."""
+        builder = MemoryBuilder()
+        memory = builder.build_pc_memory(
+            pc_id="pc_throk_001",
+            character=Character(
+                name="Throk",
+                char_class="Fighter",
+                level=3,
+                hp=24, hp_max=24, ac=5,
+                stats=Stats(str=17, dex=12, con=15, int=8, wis=10, cha=9),
+                equipment=["longsword"],
+                gold=50,
+            ),
+            events=[],
+        )
+
+        assert "class->FTR" in memory or "class->Fighter" in memory
+        assert "level->3" in memory
+
+    def test_build_pc_memory_filters_events_by_participation(self):
+        """PC only sees events they participated in."""
+        throk_event = GameEvent(
+            event_id="evt_001",
+            event_type=EventType.PLAYER_ACTION,
+            source="pc_throk_001",
+            content="Throk attacks",
+            session_id="s1",
+            metadata={"participants": ["pc_throk_001"]}
+        )
+        zara_event = GameEvent(
+            event_id="evt_002",
+            event_type=EventType.PLAYER_ACTION,
+            source="pc_zara_001",
+            content="Zara sneaks",
+            session_id="s1",
+            metadata={"participants": ["pc_zara_001"]}  # Throk not present
+        )
+
+        builder = MemoryBuilder()
+        memory = builder.build_pc_memory(
+            pc_id="pc_throk_001",
+            character=Character(
+                name="Throk", char_class="Fighter", level=1,
+                hp=8, hp_max=8, ac=5,
+                stats=Stats(str=16, dex=12, con=14, int=9, wis=10, cha=11),
+                equipment=[], gold=0,
+            ),
+            events=[throk_event, zara_event],
+        )
+
+        assert "evt_001" in memory
+        assert "evt_002" not in memory  # Throk wasn't there

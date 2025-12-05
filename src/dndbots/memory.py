@@ -8,6 +8,19 @@ from dndbots.events import GameEvent, EventType
 from dndbots.models import Character
 
 
+# Class abbreviations for compact DCML
+CLASS_ABBREV = {
+    "Fighter": "FTR",
+    "Cleric": "CLR",
+    "Thief": "THF",
+    "Magic-User": "MU",
+    "Wizard": "MU",
+    "Elf": "ELF",
+    "Dwarf": "DWF",
+    "Halfling": "HLF",
+}
+
+
 @dataclass
 class MemoryBuilder:
     """Builds DCML memory blocks from campaign state."""
@@ -91,5 +104,48 @@ class MemoryBuilder:
         if len(event.content) > 80:
             summary += "..."
         lines.append(f'    {evt_id}::summary->"{summary}"')
+
+        return "\n".join(lines)
+
+    def build_pc_memory(
+        self,
+        pc_id: str,
+        character: Character,
+        events: list[GameEvent],
+        party_id: str | None = None,
+        quests: list[dict[str, Any]] | None = None,
+    ) -> str:
+        """Build per-PC memory projection.
+
+        Only includes:
+        - Events the PC participated in
+        - Facts the PC knows or inferred
+        - Beliefs can be wrong (marked with !)
+        """
+        lines = [f"## MEMORY_{pc_id}", ""]
+
+        # Core identity
+        lines.append("# Identity & role")
+        if party_id:
+            lines.append(f"{pc_id} in {party_id};")
+
+        class_abbrev = CLASS_ABBREV.get(character.char_class, character.char_class[:3].upper())
+        lines.append(f"{pc_id}::class->{class_abbrev},level->{character.level};")
+
+        # Stats (compact format)
+        s = character.stats
+        stats_str = f"STR{s.str},DEX{s.dex},CON{s.con},INT{s.int},WIS{s.wis},CHA{s.cha}"
+        lines.append(f"{pc_id}::stats->{stats_str};")
+
+        # Filter events by participation
+        lines.append("")
+        lines.append("# Recent events")
+
+        for event in events:
+            participants = event.metadata.get("participants", [])
+            # Include if PC is source OR in participants
+            if event.source == pc_id or pc_id in participants:
+                lines.append(self.render_event(event))
+                lines.append("")
 
         return "\n".join(lines)
