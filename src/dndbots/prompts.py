@@ -4,6 +4,19 @@ from dndbots.models import Character
 from dndbots.rules import RULES_SHORTHAND
 
 
+DCML_GUIDE = """
+## Your Memory (DCML Format)
+
+Below is your compressed memory in DCML (D&D Condensed Memory Language).
+- ## LEXICON lists all entities you know about
+- ## MEMORY_<your_id> contains what you remember
+- Facts with ! prefix are your beliefs (may be inaccurate)
+- Facts with ? prefix are rumors/unconfirmed
+- Do NOT invent new entity IDs - use existing ones from LEXICON
+
+"""
+
+
 def build_dm_prompt(scenario: str) -> str:
     """Build the Dungeon Master system prompt.
 
@@ -37,21 +50,33 @@ When you need to end the session or pause, say "SESSION PAUSE" clearly.
 """
 
 
-def build_player_prompt(character: Character) -> str:
+def build_player_prompt(character: Character, memory: str | None = None) -> str:
     """Build a player agent system prompt.
 
     Args:
         character: The character this agent plays
+        memory: Optional DCML memory block to include
 
     Returns:
         Complete player system prompt
     """
-    return f"""You are playing {character.name} in a Basic D&D campaign.
+    sections = [
+        f"You are playing {character.name} in a Basic D&D campaign.",
+        "",
+        "=== YOUR CHARACTER ===",
+        character.to_sheet(),
+    ]
 
-=== YOUR CHARACTER ===
-{character.to_sheet()}
+    if memory:
+        sections.extend([
+            "",
+            DCML_GUIDE,
+            memory,
+        ])
 
-=== PLAYER GUIDELINES ===
+    sections.extend([
+        "",
+        """=== PLAYER GUIDELINES ===
 • Stay in character - respond as {character.name} would
 • Describe your actions clearly: "I attack the goblin with my sword"
 • You can ask the DM questions: "How far away is the door?"
@@ -70,5 +95,7 @@ def build_player_prompt(character: Character) -> str:
 • The DM will roll dice and describe results
 • Keep track of your HP - you can ask the DM your current status
 
-When the DM addresses you directly, respond in character.
-"""
+When the DM addresses you directly, respond in character.""".replace("{character.name}", character.name),
+    ])
+
+    return "\n".join(sections)
