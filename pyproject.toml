@@ -21,6 +21,9 @@ dev = [
     "ruff>=0.8.0",
 ]
 
+[project.scripts]
+dndbots = "dndbots.cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/dndbots"]
 
