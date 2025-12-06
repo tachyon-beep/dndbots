@@ -1,12 +1,11 @@
 <template>
   <div class="app">
-    <header class="control-bar">
-      <h1>DnDBots Admin</h1>
-      <div class="status">
-        <span :class="['indicator', { connected: wsConnected }]"></span>
-        {{ wsConnected ? 'Connected' : 'Disconnected' }}
-      </div>
-    </header>
+    <ControlBar
+      :ws-connected="wsConnected"
+      :game-status="gameStatus"
+      @start="startGame"
+      @stop="stopGame"
+    />
 
     <nav class="tabs">
       <button
@@ -25,42 +24,25 @@
 
     <main class="content">
       <div v-if="activeTab === 'live'" class="live-view">
-        <section class="narrative-feed">
-          <h2>Narrative Feed</h2>
-          <div class="feed">
-            <div
-              v-for="(event, index) in events"
-              :key="index"
-              :class="['event', event.type]"
-            >
-              <span class="source">[{{ event.source }}]</span>
-              <span class="content">{{ event.content }}</span>
-            </div>
-            <div v-if="events.length === 0" class="empty">
-              Waiting for events...
-            </div>
-          </div>
-        </section>
-
-        <section class="state-dashboard">
-          <h2>State Dashboard</h2>
-          <p>Coming soon...</p>
-        </section>
+        <NarrativeFeed :events="events" />
+        <StateDashboard :events="events" />
       </div>
 
-      <div v-else class="entity-inspector">
-        <h2>Entity Inspector</h2>
-        <p>Coming soon...</p>
-      </div>
+      <EntityInspector v-else />
     </main>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import ControlBar from './components/ControlBar.vue'
+import NarrativeFeed from './components/NarrativeFeed.vue'
+import StateDashboard from './components/StateDashboard.vue'
+import EntityInspector from './components/EntityInspector.vue'
 
 const activeTab = ref('live')
 const wsConnected = ref(false)
+const gameStatus = ref('stopped')
 const events = ref([])
 
 let ws = null
@@ -73,41 +55,64 @@ function connect() {
 
   ws.onopen = () => {
     wsConnected.value = true
-    // Send ping to test connection
     ws.send(JSON.stringify({ type: 'ping' }))
   }
 
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data)
-    if (data.type !== 'pong') {
-      events.value.push(data)
-      // Keep last 100 events
-      if (events.value.length > 100) {
-        events.value.shift()
-      }
+    if (data.type === 'pong') return
+
+    events.value.push(data)
+    if (events.value.length > 100) {
+      events.value.shift()
+    }
+
+    // Update game status from session events
+    if (data.type === 'session_start') {
+      gameStatus.value = 'running'
+    } else if (data.type === 'session_end') {
+      gameStatus.value = 'stopped'
     }
   }
 
   ws.onclose = () => {
     wsConnected.value = false
-    // Reconnect after 2 seconds
     setTimeout(connect, 2000)
   }
 
-  ws.onerror = () => {
-    ws.close()
+  ws.onerror = () => ws.close()
+}
+
+async function startGame(campaignId) {
+  try {
+    const res = await fetch(`/api/campaigns/${campaignId}/start`, {
+      method: 'POST',
+    })
+    if (res.ok) {
+      gameStatus.value = 'running'
+    }
+  } catch (err) {
+    console.error('Failed to start game:', err)
   }
 }
 
-onMounted(() => {
-  connect()
-})
-
-onUnmounted(() => {
-  if (ws) {
-    ws.close()
+async function stopGame(mode) {
+  try {
+    gameStatus.value = 'stopping'
+    const res = await fetch(`/api/campaigns/current/stop?mode=${mode}`, {
+      method: 'POST',
+    })
+    if (res.ok) {
+      gameStatus.value = 'stopped'
+    }
+  } catch (err) {
+    console.error('Failed to stop game:', err)
+    gameStatus.value = 'running'
   }
-})
+}
+
+onMounted(connect)
+onUnmounted(() => ws?.close())
 </script>
 
 <style scoped>
@@ -117,40 +122,8 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
-.control-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 2rem;
-  background: #16213e;
-  border-bottom: 1px solid #0f3460;
-}
-
-.control-bar h1 {
-  font-size: 1.5rem;
-  color: #e94560;
-}
-
-.status {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.indicator {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #666;
-}
-
-.indicator.connected {
-  background: #4caf50;
-}
-
 .tabs {
   display: flex;
-  gap: 0;
   background: #16213e;
 }
 
@@ -161,6 +134,11 @@ onUnmounted(() => {
   color: #888;
   cursor: pointer;
   border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tabs button:hover {
+  color: #ccc;
 }
 
 .tabs button.active {
@@ -171,67 +149,13 @@ onUnmounted(() => {
 .content {
   flex: 1;
   padding: 1rem;
+  overflow: hidden;
 }
 
 .live-view {
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 1rem;
-  height: calc(100vh - 120px);
-}
-
-.narrative-feed,
-.state-dashboard {
-  background: #16213e;
-  border-radius: 8px;
-  padding: 1rem;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.narrative-feed h2,
-.state-dashboard h2 {
-  margin-bottom: 1rem;
-  color: #e94560;
-}
-
-.feed {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.event {
-  padding: 0.5rem;
-  border-bottom: 1px solid #0f3460;
-}
-
-.event .source {
-  color: #e94560;
-  font-weight: bold;
-  margin-right: 0.5rem;
-}
-
-.event.narration .source {
-  color: #4caf50;
-}
-
-.event.player_action .source {
-  color: #2196f3;
-}
-
-.empty {
-  color: #666;
-  font-style: italic;
-}
-
-.entity-inspector {
-  background: #16213e;
-  border-radius: 8px;
-  padding: 1rem;
-}
-
-.entity-inspector h2 {
-  color: #e94560;
+  height: calc(100vh - 140px);
 }
 </style>

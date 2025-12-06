@@ -56,3 +56,11 @@ Thumbs.db
 
 # Project specific
 checkpoints/
+
+rules/
+
+# Vue build output (generated, not source)
+src/dndbots/admin/static/
+
+# Node modules
+admin-ui/node_modules/
