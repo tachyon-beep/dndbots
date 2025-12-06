@@ -1,5 +1,6 @@
 """FastAPI admin server for DnDBots."""
 
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,14 @@ from fastapi.staticfiles import StaticFiles
 
 # Path to static files (built Vue app)
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+class StopMode(str, Enum):
+    """Shutdown modes."""
+
+    CLEAN = "clean"
+    FAST = "fast"
+
 
 # Game state (module-level for simplicity, will be managed properly in Task 8)
 _game_state: dict[str, Any] = {
@@ -55,6 +64,32 @@ def create_app() -> FastAPI:
             "running": _game_state["running"],
             "campaign_id": _game_state["campaign_id"],
         }
+
+    @app.post("/api/campaigns/{campaign_id}/start")
+    async def start_campaign(campaign_id: str):
+        """Start the game loop for a campaign."""
+        # TODO: Look up campaign in database
+        # For now, return 404 until we wire up storage
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    @app.post("/api/campaigns/{campaign_id}/stop")
+    async def stop_campaign(campaign_id: str, mode: StopMode = StopMode.CLEAN):
+        """Stop the running game.
+
+        Args:
+            campaign_id: Campaign to stop
+            mode: clean (wait for pause) or fast (stop now with checkpoint)
+        """
+        if not _game_state["running"]:
+            raise HTTPException(status_code=400, detail="No game is running")
+
+        if _game_state["campaign_id"] != campaign_id:
+            raise HTTPException(
+                status_code=400, detail=f"Campaign {campaign_id} is not running"
+            )
+
+        # TODO: Implement actual stop logic
+        return {"status": "stopping", "mode": mode.value}
 
     # Serve Vue SPA
     @app.get("/", response_class=HTMLResponse)

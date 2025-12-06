@@ -63,3 +63,34 @@ class TestCampaignEndpoints:
         data = response.json()
         assert data["running"] is False
         assert data["campaign_id"] is None
+
+
+class TestControlEndpoints:
+    """Tests for game control endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        """Create test client."""
+        app = create_app()
+        return TestClient(app)
+
+    def test_start_campaign_not_found(self, client):
+        """Start non-existent campaign returns 404."""
+        response = client.post("/api/campaigns/nonexistent/start")
+        assert response.status_code == 404
+
+    def test_stop_no_game_running(self, client):
+        """Stop when no game running returns 400."""
+        response = client.post("/api/campaigns/test/stop")
+        assert response.status_code == 400
+        data = response.json()
+        assert "running" in data["detail"].lower()
+
+    def test_stop_mode_parameter(self, client):
+        """Stop accepts mode parameter."""
+        # Even though it will fail (no game), it should accept the parameter
+        response = client.post("/api/campaigns/test/stop?mode=clean")
+        assert response.status_code == 400  # No game running, but mode accepted
+
+        response = client.post("/api/campaigns/test/stop?mode=fast")
+        assert response.status_code == 400  # No game running, but mode accepted
