@@ -1,5 +1,6 @@
 """Command-line interface for running DnDBots."""
 
+import argparse
 import asyncio
 import os
 from pathlib import Path
@@ -91,31 +92,70 @@ async def run_game() -> None:
         await campaign.close()
 
 
+def serve(host: str = "127.0.0.1", port: int = 8000) -> None:
+    """Start the admin UI server.
+
+    Args:
+        host: Host to bind to (default: 127.0.0.1)
+        port: Port to listen on (default: 8000)
+    """
+    import uvicorn
+    from dndbots.admin import app
+
+    print(f"Starting DnDBots Admin UI at http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port)
+
+
 def main() -> None:
-    """Run a test game session."""
-    # Load environment variables
+    """Main CLI entry point."""
     load_dotenv()
 
-    # Check for API key
-    if not os.getenv("OPENAI_API_KEY"):
-        print("Error: OPENAI_API_KEY not set. Copy .env.example to .env and add your key.")
-        return
+    parser = argparse.ArgumentParser(
+        description="DnDBots - Multi-AI D&D Campaign System"
+    )
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    print("=" * 60)
-    print("DnDBots - Basic D&D AI Campaign")
-    print("=" * 60)
-    print(f"\nData directory: {DATA_DIR}")
-    print("Type Ctrl+C to stop\n")
+    # 'run' command (default behavior)
+    run_parser = subparsers.add_parser("run", help="Run a game session")
 
-    # Run the game
-    try:
-        asyncio.run(run_game())
-    except KeyboardInterrupt:
-        print("\n\n[System] Session interrupted by user.")
+    # 'serve' command
+    serve_parser = subparsers.add_parser("serve", help="Start admin UI server")
+    serve_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host to bind to (default: 127.0.0.1)",
+    )
+    serve_parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to listen on (default: 8000)",
+    )
 
-    print("\n" + "=" * 60)
-    print("Session ended")
-    print("=" * 60)
+    args = parser.parse_args()
+
+    if args.command == "serve":
+        serve(host=args.host, port=args.port)
+    else:
+        # Default: run the game
+        if not os.getenv("OPENAI_API_KEY"):
+            print("Error: OPENAI_API_KEY not set. Copy .env.example to .env and add your key.")
+            return
+
+        print("=" * 60)
+        print("DnDBots - Basic D&D AI Campaign")
+        print("=" * 60)
+        print(f"\nData directory: {DATA_DIR}")
+        print("Type Ctrl+C to stop\n")
+
+        try:
+            asyncio.run(run_game())
+        except KeyboardInterrupt:
+            print("\n\n[System] Session interrupted by user.")
+
+        print("\n" + "=" * 60)
+        print("Session ended")
+        print("=" * 60)
 
 
 if __name__ == "__main__":
