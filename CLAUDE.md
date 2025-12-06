@@ -154,12 +154,16 @@ Prompts are in `prompts.py`. Key sections:
 - **Don't modify dm_selector without understanding it** - Turn order is intentional
 - **Don't use sync database calls** - Everything is async
 
-## Future Work (Not Yet Implemented)
+## Implementation Status
 
-- **Phase 3**: Multi-provider support (Claude, Gemini, DeepSeek)
-- **Phase 4**: StoryShorthand compression for context efficiency
-- **Phase 5**: Discord output, event bus architecture
-- **Phase 6**: Web admin UI, graceful shutdown
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Minimal game loop | ✅ Complete |
+| 2 | Persistence (SQLite + Neo4j) | ✅ Complete |
+| 3 | Multi-provider (Claude, Gemini, DeepSeek) | ⏸️ Deferred |
+| 4 | DCML compression | ✅ Complete |
+| 5 | Extensible output layer | ✅ Complete |
+| 6 | Admin UI + graceful shutdown | 📋 Designed |
 
 See `docs/plans/` for detailed implementation plans.
 
