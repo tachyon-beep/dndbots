@@ -181,3 +181,68 @@ class TestGameMemory:
 
         # Verify it returns None
         assert memory is None
+
+
+class TestGameEventBus:
+    def test_game_uses_default_event_bus(self, monkeypatch):
+        """Game creates default EventBus with ConsolePlugin when none provided."""
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        char = Character(
+            name="Throk",
+            char_class="Fighter",
+            level=1,
+            hp=8, hp_max=8, ac=5,
+            stats=Stats(str=16, dex=12, con=14, int=9, wis=10, cha=11),
+            equipment=["longsword"],
+            gold=25,
+        )
+
+        game = DnDGame(
+            scenario="Test scenario",
+            characters=[char],
+            dm_model="gpt-4o",
+            player_model="gpt-4o",
+        )
+
+        # Verify game has an event bus
+        assert game._event_bus is not None
+        # Verify it has at least one plugin (ConsolePlugin)
+        assert len(game._event_bus.plugins) == 1
+
+    def test_game_accepts_custom_event_bus(self, monkeypatch):
+        """Game can accept a custom EventBus."""
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        from dndbots.output import EventBus
+        from dndbots.output.plugins import CallbackPlugin
+
+        # Create custom bus
+        custom_bus = EventBus()
+        custom_bus.register(CallbackPlugin(
+            name="test",
+            callback=lambda e: None,
+        ))
+
+        char = Character(
+            name="Throk",
+            char_class="Fighter",
+            level=1,
+            hp=8, hp_max=8, ac=5,
+            stats=Stats(str=16, dex=12, con=14, int=9, wis=10, cha=11),
+            equipment=["longsword"],
+            gold=25,
+        )
+
+        game = DnDGame(
+            scenario="Test scenario",
+            characters=[char],
+            dm_model="gpt-4o",
+            player_model="gpt-4o",
+            event_bus=custom_bus,
+        )
+
+        # Verify game uses the custom bus
+        assert game._event_bus is custom_bus
+        assert len(game._event_bus.plugins) == 1
+        assert game._event_bus.plugins[0].name == "test"

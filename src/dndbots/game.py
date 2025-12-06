@@ -12,6 +12,8 @@ from dndbots.events import GameEvent, EventType
 from dndbots.memory import MemoryBuilder
 from dndbots.models import Character
 from dndbots.prompts import build_dm_prompt, build_player_prompt
+from dndbots.output import EventBus, OutputEvent, OutputEventType
+from dndbots.output.plugins import ConsolePlugin
 
 
 def create_dm_agent(
@@ -94,6 +96,7 @@ class DnDGame:
         player_model: str = "gpt-4o",
         campaign: Campaign | None = None,
         enable_memory: bool = True,
+        event_bus: EventBus | None = None,
     ):
         """Initialize a game session.
 
@@ -104,11 +107,18 @@ class DnDGame:
             player_model: Model for player agents
             campaign: Optional campaign for persistence
             enable_memory: Enable DCML memory projection (default: True)
+            event_bus: Optional event bus for output (default: ConsolePlugin)
         """
         self.scenario = scenario
         self.characters = characters
         self.campaign = campaign
         self._memory_builder = MemoryBuilder() if enable_memory else None
+
+        # Initialize event bus (default to console output)
+        if event_bus is None:
+            event_bus = EventBus()
+            event_bus.register(ConsolePlugin())
+        self._event_bus = event_bus
 
         # Create agents
         self.dm = create_dm_agent(scenario, dm_model)
@@ -135,33 +145,76 @@ class DnDGame:
             Phase 1 uses "SESSION PAUSE" termination condition.
             Turn counting/max_turns will be added in a future phase if needed.
         """
-        # Start with DM setting the scene
-        initial_message = (
-            f"Begin the adventure. Set the scene for the party: "
-            f"{', '.join(c.name for c in self.characters)}. "
-            f"Describe where they are and what they see."
-        )
+        # Start the event bus
+        await self._event_bus.start()
 
-        async for message in self.team.run_stream(task=initial_message):
-            # Print each message as it comes
-            if hasattr(message, 'source') and hasattr(message, 'content'):
-                print(f"\n[{message.source}]: {message.content}")
+        # Emit session start event
+        campaign_id = self.campaign.campaign_id if self.campaign else "unknown"
+        await self._event_bus.emit(OutputEvent(
+            event_type=OutputEventType.SESSION_START,
+            source="system",
+            content=f"Session started: {campaign_id}",
+        ))
 
-                # Record event if campaign is set
-                if self.campaign:
-                    # Determine event type based on source
-                    if message.source == "dm":
-                        event_type = EventType.DM_NARRATION
-                    else:
-                        event_type = EventType.PLAYER_ACTION
+        try:
+            # Start with DM setting the scene
+            initial_message = (
+                f"Begin the adventure. Set the scene for the party: "
+                f"{', '.join(c.name for c in self.characters)}. "
+                f"Describe where they are and what they see."
+            )
 
-                    event = GameEvent(
-                        event_type=event_type,
-                        source=message.source,
-                        content=message.content,
-                        session_id=self.campaign.current_session_id or "unknown",
-                    )
-                    await self.campaign.record_event(event)
+            async for message in self.team.run_stream(task=initial_message):
+                # Emit message to output plugins
+                if hasattr(message, 'source') and hasattr(message, 'content'):
+                    await self._emit_message(message)
+
+                    # Record event if campaign is set
+                    if self.campaign:
+                        # Determine event type based on source
+                        if message.source == "dm":
+                            event_type = EventType.DM_NARRATION
+                        else:
+                            event_type = EventType.PLAYER_ACTION
+
+                        event = GameEvent(
+                            event_type=event_type,
+                            source=message.source,
+                            content=message.content,
+                            session_id=self.campaign.current_session_id or "unknown",
+                        )
+                        await self.campaign.record_event(event)
+        finally:
+            # Emit session end and stop the bus
+            await self._event_bus.emit(OutputEvent(
+                event_type=OutputEventType.SESSION_END,
+                source="system",
+                content="Session ended",
+            ))
+            await self._event_bus.stop()
+
+    async def _emit_message(self, message) -> None:
+        """Convert AutoGen message to OutputEvent and emit.
+
+        Args:
+            message: AutoGen message with source and content attributes
+        """
+        source = getattr(message, 'source', 'unknown')
+        content = getattr(message, 'content', str(message))
+
+        # Determine event type based on source
+        if source == "dm":
+            event_type = OutputEventType.NARRATION
+        elif source.startswith("pc_") or any(source == c.name for c in self.characters):
+            event_type = OutputEventType.PLAYER_ACTION
+        else:
+            event_type = OutputEventType.SYSTEM
+
+        await self._event_bus.emit(OutputEvent(
+            event_type=event_type,
+            source=source,
+            content=content,
+        ))
 
     def _build_player_memory(self, char: Character) -> str | None:
         """Build DCML memory for a player character.
