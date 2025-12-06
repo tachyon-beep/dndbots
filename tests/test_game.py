@@ -84,3 +84,100 @@ class TestDnDGame:
         )
         assert game.dm is not None
         assert len(game.players) == 1
+
+
+class TestGameMemory:
+    @pytest.mark.asyncio
+    async def test_game_builds_player_memory(self, monkeypatch):
+        """Game builds DCML memory for player agents."""
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        char = Character(
+            name="Throk",
+            char_class="Fighter",
+            level=1,
+            hp=8, hp_max=8, ac=5,
+            stats=Stats(str=16, dex=12, con=14, int=9, wis=10, cha=11),
+            equipment=["longsword"],
+            gold=25,
+        )
+
+        game = DnDGame(
+            scenario="Test scenario",
+            characters=[char],
+            dm_model="gpt-4o",
+            player_model="gpt-4o",
+        )
+
+        # Verify game initialization
+        assert game.dm is not None
+        assert len(game.players) == 1
+
+        # Get the player agent's system messages
+        player_agent = game.players[0]
+
+        # Check that system messages include character name
+        # AssistantAgent stores system message in _system_messages
+        assert hasattr(player_agent, '_system_messages')
+        system_messages = player_agent._system_messages
+        assert len(system_messages) > 0
+        assert "Throk" in str(system_messages)
+
+    def test_build_player_memory_creates_dcml(self, monkeypatch):
+        """_build_player_memory() creates DCML memory document."""
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        char = Character(
+            name="Throk",
+            char_class="Fighter",
+            level=1,
+            hp=8, hp_max=8, ac=5,
+            stats=Stats(str=16, dex=12, con=14, int=9, wis=10, cha=11),
+            equipment=["longsword"],
+            gold=25,
+        )
+
+        game = DnDGame(
+            scenario="Test scenario",
+            characters=[char],
+            dm_model="gpt-4o",
+            player_model="gpt-4o",
+            enable_memory=True,
+        )
+
+        # Call _build_player_memory
+        memory = game._build_player_memory(char)
+
+        # Verify DCML structure
+        assert memory is not None
+        assert "## LEXICON" in memory
+        assert "## MEMORY_pc_throk_001" in memory
+        assert "Throk" in memory
+
+    def test_build_player_memory_disabled(self, monkeypatch):
+        """_build_player_memory() returns None when memory disabled."""
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        char = Character(
+            name="Throk",
+            char_class="Fighter",
+            level=1,
+            hp=8, hp_max=8, ac=5,
+            stats=Stats(str=16, dex=12, con=14, int=9, wis=10, cha=11),
+            equipment=["longsword"],
+            gold=25,
+        )
+
+        game = DnDGame(
+            scenario="Test scenario",
+            characters=[char],
+            dm_model="gpt-4o",
+            player_model="gpt-4o",
+            enable_memory=False,
+        )
+
+        # Call _build_player_memory
+        memory = game._build_player_memory(char)
+
+        # Verify it returns None
+        assert memory is None

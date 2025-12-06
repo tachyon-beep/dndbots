@@ -9,6 +9,7 @@ from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 from dndbots.campaign import Campaign
 from dndbots.events import GameEvent, EventType
+from dndbots.memory import MemoryBuilder
 from dndbots.models import Character
 from dndbots.prompts import build_dm_prompt, build_player_prompt
 
@@ -92,6 +93,7 @@ class DnDGame:
         dm_model: str = "gpt-4o",
         player_model: str = "gpt-4o",
         campaign: Campaign | None = None,
+        enable_memory: bool = True,
     ):
         """Initialize a game session.
 
@@ -101,10 +103,12 @@ class DnDGame:
             dm_model: Model for DM agent
             player_model: Model for player agents
             campaign: Optional campaign for persistence
+            enable_memory: Enable DCML memory projection (default: True)
         """
         self.scenario = scenario
         self.characters = characters
         self.campaign = campaign
+        self._memory_builder = MemoryBuilder() if enable_memory else None
 
         # Create agents
         self.dm = create_dm_agent(scenario, dm_model)
@@ -158,3 +162,30 @@ class DnDGame:
                         session_id=self.campaign.current_session_id or "unknown",
                     )
                     await self.campaign.record_event(event)
+
+    def _build_player_memory(self, char: Character) -> str | None:
+        """Build DCML memory for a player character.
+
+        Args:
+            char: The character to build memory for
+
+        Returns:
+            DCML memory document, or None if memory is disabled
+        """
+        if not self._memory_builder:
+            return None
+
+        char_id = getattr(char, 'char_id', None) or f"pc_{char.name.lower()}_001"
+
+        # Get events from campaign if available
+        events = []
+        if self.campaign:
+            # TODO: Get events from campaign.get_session_events()
+            pass
+
+        return self._memory_builder.build_memory_document(
+            pc_id=char_id,
+            character=char,
+            all_characters=self.characters,
+            events=events,
+        )
