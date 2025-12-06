@@ -6,7 +6,24 @@
 
 **Architecture:** Pub/sub pattern where game events flow through a central EventBus to registered OutputPlugins. Each plugin implements a simple protocol and can filter which event types it handles. Built-in plugins for console and logging; external plugins (Discord, TTS) can be added without modifying core code.
 
-**Tech Stack:** Python Protocol (structural typing), asyncio, dataclasses, logging module
+**Tech Stack:** Python Protocol (structural typing), asyncio, dataclasses, logging module, aiofiles
+
+---
+
+## Architecture Note: OutputEvent vs GameEvent
+
+**Why two event types?**
+
+- **GameEvent** (in `events.py`): For **persistence**. Stored in SQLite, event-sourced, reconstructs game state. Contains full structured data (event_id, campaign_id, session_id, etc.).
+
+- **OutputEvent** (new): For **presentation**. Flows through EventBus to plugins (console, Discord, TTS). Lightweight, formatted for display, not persisted.
+
+**Relationship:** Game loop creates GameEvents for persistence, then converts to OutputEvents for display. They serve different architectural layers:
+
+```
+Game Loop → GameEvent → SQLite (persistence layer)
+         ↘ OutputEvent → EventBus → Plugins (presentation layer)
+```
 
 ---
 
@@ -485,10 +502,13 @@ Expected: FAIL with "cannot import name 'EventBus'"
 """Event bus for routing output events to plugins."""
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 
 from dndbots.output.events import OutputEvent
 from dndbots.output.plugin import OutputPlugin
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -538,19 +558,24 @@ class EventBus:
         """Handle event with error protection."""
         try:
             await plugin.handle(event)
-        except Exception as e:
-            # Log but don't propagate - one plugin shouldn't break others
-            print(f"Plugin {plugin.name} error: {e}")
+        except Exception:
+            logger.exception(f"Plugin {plugin.name} failed to handle event")
 
     async def start(self) -> None:
         """Start all plugins."""
         for plugin in self.plugins:
-            await plugin.start()
+            try:
+                await plugin.start()
+            except Exception:
+                logger.exception(f"Plugin {plugin.name} failed to start")
 
     async def stop(self) -> None:
-        """Stop all plugins."""
+        """Stop all plugins, ensuring all get stop() called even if one fails."""
         for plugin in self.plugins:
-            await plugin.stop()
+            try:
+                await plugin.stop()
+            except Exception:
+                logger.exception(f"Plugin {plugin.name} failed to stop")
 ```
 
 Update `src/dndbots/output/__init__.py`:
@@ -890,6 +915,16 @@ class TestJsonLogPlugin:
         assert data["metadata"]["roll"] == "d20"
 
         Path(log_path).unlink()
+
+    def test_rejects_path_traversal(self):
+        """Path traversal attempts are rejected."""
+        with pytest.raises(ValueError, match="Path traversal"):
+            JsonLogPlugin(log_path="../../../etc/passwd.jsonl")
+
+    def test_rejects_nonexistent_parent(self):
+        """Paths with nonexistent parent directories are rejected."""
+        with pytest.raises(ValueError, match="Parent directory does not exist"):
+            JsonLogPlugin(log_path="/nonexistent/path/game.jsonl")
 ```
 
 **Step 2: Run test to verify it fails**
@@ -905,7 +940,10 @@ Expected: FAIL with "cannot import name 'JsonLogPlugin'"
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TextIO
+from typing import Any
+
+import aiofiles
+from aiofiles.threadpool.text import AsyncTextIOWrapper
 
 from dndbots.output.events import OutputEvent, OutputEventType
 
@@ -920,11 +958,29 @@ class JsonLogPlugin:
     Args:
         log_path: Path to the .jsonl log file
         handled_types: Event types to handle, or None for all
+
+    Raises:
+        ValueError: If log_path is invalid or not writable
     """
 
     log_path: str
     handled_types: set[OutputEventType] | None = None
-    _file: TextIO | None = field(default=None, repr=False)
+    _file: AsyncTextIOWrapper | None = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        """Validate log path."""
+        path = Path(self.log_path)
+        # Ensure parent directory exists
+        if not path.parent.exists():
+            raise ValueError(f"Parent directory does not exist: {path.parent}")
+        # Check for path traversal (resolve and compare)
+        try:
+            resolved = path.resolve()
+            # Ensure we're not escaping to unexpected locations
+            if ".." in str(path):
+                raise ValueError(f"Path traversal not allowed: {self.log_path}")
+        except OSError as e:
+            raise ValueError(f"Invalid path: {self.log_path}") from e
 
     @property
     def name(self) -> str:
@@ -932,12 +988,12 @@ class JsonLogPlugin:
 
     async def start(self) -> None:
         """Open log file for writing."""
-        self._file = open(self.log_path, "a")
+        self._file = await aiofiles.open(self.log_path, "a")
 
     async def stop(self) -> None:
         """Close log file."""
         if self._file:
-            self._file.close()
+            await self._file.close()
             self._file = None
 
     async def handle(self, event: OutputEvent) -> None:
@@ -953,8 +1009,8 @@ class JsonLogPlugin:
             "metadata": event.metadata,
         }
 
-        self._file.write(json.dumps(data) + "\n")
-        self._file.flush()
+        await self._file.write(json.dumps(data) + "\n")
+        await self._file.flush()
 ```
 
 Update `src/dndbots/output/plugins/__init__.py`:
@@ -1202,6 +1258,7 @@ git commit -m "feat: CallbackPlugin for custom handlers"
 """Integration tests for the output system."""
 
 import json
+import logging
 import pytest
 import tempfile
 from pathlib import Path
@@ -1331,7 +1388,7 @@ class TestOutputIntegration:
         assert len(dice_only) == 1
 
     @pytest.mark.asyncio
-    async def test_plugin_error_isolation(self, capsys):
+    async def test_plugin_error_isolation(self, caplog):
         """Errors in one plugin don't affect others."""
         good_events = []
 
@@ -1351,11 +1408,12 @@ class TestOutputIntegration:
         await bus.start()
 
         # Should not raise, despite bad plugin
-        await bus.emit(OutputEvent(
-            event_type=OutputEventType.NARRATION,
-            source="dm",
-            content="Test",
-        ))
+        with caplog.at_level(logging.ERROR):
+            await bus.emit(OutputEvent(
+                event_type=OutputEventType.NARRATION,
+                source="dm",
+                content="Test",
+            ))
 
         await bus.stop()
 
@@ -1363,8 +1421,8 @@ class TestOutputIntegration:
         assert len(good_events) == 1
 
         # Error was logged
-        captured = capsys.readouterr()
-        assert "bad" in captured.out or "error" in captured.out.lower()
+        assert "bad" in caplog.text
+        assert "failed to handle" in caplog.text
 ```
 
 **Step 2: Run integration test**
@@ -1462,6 +1520,143 @@ git commit -m "docs: comprehensive output module documentation"
 
 ---
 
+## Task 9: Wire EventBus into Game Loop
+
+**Files:**
+- Modify: `src/dndbots/game.py`
+- Test: `tests/test_game.py` (add output tests)
+
+**Step 1: Update DnDGame constructor**
+
+Add EventBus parameter and output event emission to game.py:
+
+```python
+# At top of file, add imports:
+from dndbots.output import EventBus, OutputEvent, OutputEventType
+from dndbots.output.plugins import ConsolePlugin
+
+# In DnDGame.__init__, add parameter:
+def __init__(
+    self,
+    campaign: Campaign,
+    dm_model: str = "gpt-4o",
+    player_characters: list[Character] | None = None,
+    enable_memory: bool = True,
+    event_bus: EventBus | None = None,  # NEW
+):
+    # ... existing code ...
+
+    # Initialize event bus (default to console output)
+    if event_bus is None:
+        event_bus = EventBus()
+        event_bus.register(ConsolePlugin())
+    self._event_bus = event_bus
+```
+
+**Step 2: Add output emission in run() method**
+
+Replace or augment existing print statements with event emission:
+
+```python
+async def run(self, initial_prompt: str, max_turns: int = 20) -> None:
+    """Run game session."""
+    # Start the event bus
+    await self._event_bus.start()
+
+    # Emit session start
+    await self._event_bus.emit(OutputEvent(
+        event_type=OutputEventType.SESSION_START,
+        source="system",
+        content=f"Session started: {self._campaign.campaign_id}",
+    ))
+
+    try:
+        # ... existing game loop code ...
+
+        # In the message handling loop, replace print with emit:
+        # OLD: print(f"\n[{message.source}]: {message.content}")
+        # NEW:
+        await self._emit_message(message)
+
+    finally:
+        # Emit session end
+        await self._event_bus.emit(OutputEvent(
+            event_type=OutputEventType.SESSION_END,
+            source="system",
+            content="Session ended",
+        ))
+        await self._event_bus.stop()
+
+async def _emit_message(self, message) -> None:
+    """Convert AutoGen message to OutputEvent and emit."""
+    source = getattr(message, 'source', 'unknown')
+    content = getattr(message, 'content', str(message))
+
+    # Determine event type based on source
+    if source == "dm":
+        event_type = OutputEventType.NARRATION
+    elif source.startswith("pc_"):
+        event_type = OutputEventType.PLAYER_ACTION
+    else:
+        event_type = OutputEventType.SYSTEM
+
+    await self._event_bus.emit(OutputEvent(
+        event_type=event_type,
+        source=source,
+        content=content,
+    ))
+```
+
+**Step 3: Add test for output integration**
+
+Add to `tests/test_game.py`:
+
+```python
+@pytest.mark.asyncio
+async def test_game_emits_output_events(tmp_path, monkeypatch):
+    """Game loop emits output events to registered plugins."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+    # Track emitted events
+    emitted = []
+
+    from dndbots.output import EventBus, OutputEventType
+    from dndbots.output.plugins import CallbackPlugin
+
+    bus = EventBus()
+    bus.register(CallbackPlugin(
+        name="test",
+        callback=lambda e: emitted.append(e),
+    ))
+
+    # Create game with custom bus
+    campaign = Campaign(data_dir=str(tmp_path))
+    await campaign.initialize()
+
+    game = DnDGame(
+        campaign=campaign,
+        event_bus=bus,
+    )
+
+    # Note: Full run test requires mocking OpenAI
+    # This tests the bus is properly initialized
+    assert game._event_bus is bus
+```
+
+**Step 4: Run tests**
+
+Run: `pytest tests/test_game.py -v`
+Expected: PASS
+
+**Step 5: Commit**
+
+```bash
+git add src/dndbots/game.py tests/test_game.py
+git commit -m "feat: wire EventBus into game loop"
+```
+
+---
+
 ## Summary
 
 Phase 5 implements an extensible output layer:
@@ -1470,12 +1665,22 @@ Phase 5 implements an extensible output layer:
 |------|-----------|---------|
 | 1 | OutputEvent | Event data structure |
 | 2 | OutputPlugin | Protocol for plugins |
-| 3 | EventBus | Central routing hub |
+| 3 | EventBus | Central routing hub (with logging) |
 | 4 | ConsolePlugin | Terminal output |
-| 5 | JsonLogPlugin | Structured logging |
+| 5 | JsonLogPlugin | Structured logging (async, validated) |
 | 6 | CallbackPlugin | Custom handlers |
 | 7 | Integration test | End-to-end verification |
 | 8 | Package exports | Clean public API |
+| 9 | Game integration | Wire EventBus into DnDGame |
+
+### Dependencies
+
+Before starting, ensure `aiofiles` is installed:
+
+```bash
+pip install aiofiles
+# Or add to pyproject.toml: aiofiles>=23.2.1
+```
 
 ### Example Usage
 
