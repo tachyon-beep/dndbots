@@ -125,3 +125,37 @@ class TestWebSocket:
             websocket.send_json({"type": "ping"})
             data = websocket.receive_json()
             assert data["type"] == "pong"
+
+
+class TestEntityEndpoints:
+    """Tests for entity lookup endpoints."""
+
+    @pytest.fixture
+    def client(self):
+        """Create test client."""
+        app = create_app()
+        return TestClient(app)
+
+    def test_get_entity_not_found(self, client):
+        """Get non-existent entity returns 404."""
+        response = client.get("/api/entity/pc_nonexistent_001")
+        assert response.status_code == 404
+
+    def test_get_entity_relationships_not_found(self, client):
+        """Get relationships for non-existent entity returns 404."""
+        response = client.get("/api/entity/pc_nonexistent_001/relationships")
+        assert response.status_code == 404
+
+    def test_search_empty_query(self, client):
+        """Search with empty query returns empty results."""
+        response = client.get("/api/search?q=")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["results"] == []
+
+    def test_search_no_results(self, client):
+        """Search with no matches returns empty results."""
+        response = client.get("/api/search?q=nonexistent")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["results"] == []

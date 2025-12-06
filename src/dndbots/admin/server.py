@@ -101,6 +101,27 @@ def create_app() -> FastAPI:
         # TODO: Implement actual stop logic
         return {"status": "stopping", "mode": mode.value}
 
+    @app.get("/api/entity/{uid}")
+    async def get_entity(uid: str):
+        """Get entity document from SQLite."""
+        # TODO: Query SQLite for entity by UID
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    @app.get("/api/entity/{uid}/relationships")
+    async def get_entity_relationships(uid: str):
+        """Get entity relationships from Neo4j."""
+        # TODO: Query Neo4j for relationships
+        raise HTTPException(status_code=404, detail="Entity not found")
+
+    @app.get("/api/search")
+    async def search_entities(q: str = ""):
+        """Search entities by name or partial UID."""
+        if not q:
+            return {"results": []}
+
+        # TODO: Search SQLite for matching entities
+        return {"results": []}
+
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
         """WebSocket endpoint for real-time event streaming."""
