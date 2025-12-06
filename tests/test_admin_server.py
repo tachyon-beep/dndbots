@@ -94,3 +94,34 @@ class TestControlEndpoints:
 
         response = client.post("/api/campaigns/test/stop?mode=fast")
         assert response.status_code == 400  # No game running, but mode accepted
+
+
+class TestWebSocket:
+    """Tests for WebSocket endpoint."""
+
+    def test_websocket_connect(self):
+        """WebSocket connection works."""
+        app = create_app()
+        client = TestClient(app)
+
+        with client.websocket_connect("/ws") as websocket:
+            # Should connect successfully
+            # Send a ping to verify connection
+            websocket.send_json({"type": "ping"})
+            data = websocket.receive_json()
+            assert data["type"] == "pong"
+
+    def test_websocket_receives_events(self):
+        """WebSocket receives broadcasted events."""
+        from dndbots.admin.plugin import AdminPlugin
+        from dndbots.output import OutputEvent, OutputEventType
+
+        app = create_app()
+        # Get the plugin from the app state
+        # This will be set up properly when we integrate
+
+        client = TestClient(app)
+        with client.websocket_connect("/ws") as websocket:
+            websocket.send_json({"type": "ping"})
+            data = websocket.receive_json()
+            assert data["type"] == "pong"

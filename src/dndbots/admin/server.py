@@ -4,12 +4,22 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from dndbots.admin.plugin import AdminPlugin
+
 # Path to static files (built Vue app)
 STATIC_DIR = Path(__file__).parent / "static"
+
+# Shared AdminPlugin instance
+_admin_plugin = AdminPlugin()
+
+
+def get_admin_plugin() -> AdminPlugin:
+    """Get the shared AdminPlugin instance."""
+    return _admin_plugin
 
 
 class StopMode(str, Enum):
@@ -90,6 +100,25 @@ def create_app() -> FastAPI:
 
         # TODO: Implement actual stop logic
         return {"status": "stopping", "mode": mode.value}
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(websocket: WebSocket):
+        """WebSocket endpoint for real-time event streaming."""
+        await websocket.accept()
+        _admin_plugin.add_client(websocket)
+
+        try:
+            while True:
+                data = await websocket.receive_json()
+
+                # Handle ping/pong for connection keepalive
+                if data.get("type") == "ping":
+                    await websocket.send_json({"type": "pong"})
+
+        except WebSocketDisconnect:
+            pass
+        finally:
+            _admin_plugin.remove_client(websocket)
 
     # Serve Vue SPA
     @app.get("/", response_class=HTMLResponse)
