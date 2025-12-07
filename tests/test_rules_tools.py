@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from dndbots.rules_tools import get_rules, list_rules
-from dndbots.rules_index import RulesIndex, RulesResult, RulesIndexEntry
+from dndbots.rules_tools import get_rules, list_rules, search_rules
+from dndbots.rules_index import RulesIndex, RulesResult, RulesIndexEntry, RulesMatch
 
 
 @pytest.fixture
@@ -175,3 +175,39 @@ class TestListRules:
         goblin = next(r for r in results if r.name == "Goblin")
         assert goblin.summary == "Small chaotic humanoids"
         assert "humanoid" in goblin.tags
+
+
+class TestSearchRules:
+    def test_search_rules_by_keyword(self, rules_index_with_multiple):
+        """search_rules finds entries matching keywords."""
+        results = search_rules(rules_index_with_multiple, "paralyze")
+        assert len(results) >= 1
+        # Ghoul has "paralyze" in summary and special abilities
+        paths = [r.path for r in results]
+        assert "monsters/ghoul" in paths
+
+    def test_search_rules_in_full_text(self, rules_index_with_multiple):
+        """search_rules searches full text."""
+        results = search_rules(rules_index_with_multiple, "animated")
+        # Skeleton has "Animated bones" in summary
+        paths = [r.path for r in results]
+        assert "monsters/skeleton" in paths
+
+    def test_search_rules_returns_matches(self, rules_index_with_multiple):
+        """search_rules returns RulesMatch objects."""
+        results = search_rules(rules_index_with_multiple, "undead")
+        assert all(isinstance(r, RulesMatch) for r in results)
+        assert all(r.relevance > 0 for r in results)
+
+    def test_search_rules_respects_limit(self, rules_index_with_multiple):
+        """search_rules respects limit parameter."""
+        results = search_rules(rules_index_with_multiple, "monster", limit=1)
+        assert len(results) <= 1
+
+    def test_search_rules_category_filter(self, rules_index_with_multiple):
+        """search_rules can filter by category."""
+        results = search_rules(
+            rules_index_with_multiple, "chaotic", category="monsters"
+        )
+        # Should find goblin and skeleton (both are Chaotic)
+        assert len(results) >= 1

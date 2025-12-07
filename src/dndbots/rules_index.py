@@ -245,3 +245,58 @@ class RulesIndex:
             results.append(entry)
 
         return results
+
+    def search(
+        self,
+        query: str,
+        category: str | None = None,
+        limit: int = 5,
+    ) -> list[tuple[RulesEntry, float, str]]:
+        """Search entries by keyword.
+
+        Args:
+            query: Search query
+            category: Optional category filter
+            limit: Maximum results
+
+        Returns:
+            List of (entry, relevance, snippet) tuples
+        """
+        query_lower = query.lower()
+        results = []
+
+        for path, entry in self._entries.items():
+            # Apply category filter
+            if category and not path.startswith(category):
+                continue
+
+            # Search in name, summary, full_text, tags
+            score = 0.0
+            snippet = ""
+
+            if query_lower in entry.name.lower():
+                score += 1.0
+                snippet = entry.name
+
+            if query_lower in entry.summary.lower():
+                score += 0.8
+                snippet = snippet or entry.summary
+
+            if query_lower in entry.full_text.lower():
+                score += 0.5
+                # Extract snippet around match
+                idx = entry.full_text.lower().find(query_lower)
+                start = max(0, idx - 30)
+                end = min(len(entry.full_text), idx + len(query) + 30)
+                snippet = snippet or f"...{entry.full_text[start:end]}..."
+
+            if any(query_lower in tag.lower() for tag in entry.tags):
+                score += 0.6
+                snippet = snippet or f"Tags: {', '.join(entry.tags)}"
+
+            if score > 0:
+                results.append((entry, score, snippet))
+
+        # Sort by score descending
+        results.sort(key=lambda x: x[1], reverse=True)
+        return results[:limit]

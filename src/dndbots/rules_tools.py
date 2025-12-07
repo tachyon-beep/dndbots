@@ -7,6 +7,7 @@ from dndbots.rules_index import (
     RulesEntry,
     RulesResult,
     RulesIndexEntry,
+    RulesMatch,
     MonsterEntry,
     SpellEntry,
 )
@@ -121,4 +122,35 @@ def list_rules(
             stat_preview=e.stat_block,
         )
         for e in entries
+    ]
+
+
+def search_rules(
+    index: RulesIndex,
+    query: str,
+    category: str | None = None,
+    limit: int = 5,
+) -> list[RulesMatch]:
+    """Search rules by keywords.
+
+    Args:
+        index: The RulesIndex to query
+        query: Search query
+        category: Optional category filter
+        limit: Maximum results to return
+
+    Returns:
+        List of RulesMatch with path, relevance, snippet
+    """
+    results = index.search(query, category=category, limit=limit)
+
+    return [
+        RulesMatch(
+            path=entry.path,
+            name=entry.name,
+            category=entry.category,
+            relevance=relevance,
+            snippet=snippet,
+        )
+        for entry, relevance, snippet in results
     ]
