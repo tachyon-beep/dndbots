@@ -1,9 +1,10 @@
 """Session Zero: Collaborative campaign and character creation."""
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
-from dndbots.models import Character
+from dndbots.models import Character, Stats
 
 
 @dataclass
@@ -114,3 +115,87 @@ Background: <1-2 sentence background>
 - Don't dominate - let others shine too
 - Be ready to adjust your concept to fit the party
 """
+
+
+def parse_scenario(text: str) -> str:
+    """Extract scenario from [SCENARIO]...[/SCENARIO] block.
+
+    Args:
+        text: Text containing scenario block
+
+    Returns:
+        Scenario content, or empty string if not found
+    """
+    match = re.search(r"\[SCENARIO\]\s*(.*?)\s*\[/SCENARIO\]", text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return ""
+
+
+def parse_party_document(text: str) -> str:
+    """Extract party document from [PARTY_DOCUMENT]...[/PARTY_DOCUMENT] block.
+
+    Args:
+        text: Text containing party document block
+
+    Returns:
+        Party document content, or empty string if not found
+    """
+    match = re.search(r"\[PARTY_DOCUMENT\]\s*(.*?)\s*\[/PARTY_DOCUMENT\]", text, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return ""
+
+
+def parse_character(text: str) -> Character | None:
+    """Parse character from [CHARACTER]...[/CHARACTER] block.
+
+    Args:
+        text: Text containing character block
+
+    Returns:
+        Character object, or None if not found/invalid
+    """
+    match = re.search(r"\[CHARACTER\]\s*(.*?)\s*\[/CHARACTER\]", text, re.DOTALL)
+    if not match:
+        return None
+
+    content = match.group(1)
+
+    # Parse fields
+    name_match = re.search(r"Name:\s*(.+)", content)
+    class_match = re.search(r"Class:\s*(.+)", content)
+    stats_match = re.search(
+        r"Stats:\s*STR\s*(\d+),\s*INT\s*(\d+),\s*WIS\s*(\d+),\s*DEX\s*(\d+),\s*CON\s*(\d+),\s*CHA\s*(\d+)",
+        content
+    )
+    hp_match = re.search(r"HP:\s*(\d+)", content)
+    ac_match = re.search(r"AC:\s*(\d+)", content)
+    equipment_match = re.search(r"Equipment:\s*(.+)", content)
+    background_match = re.search(r"Background:\s*(.+)", content)
+
+    if not all([name_match, class_match, stats_match, hp_match, ac_match]):
+        return None
+
+    equipment = []
+    if equipment_match:
+        equipment = [e.strip() for e in equipment_match.group(1).split(",")]
+
+    return Character(
+        name=name_match.group(1).strip(),
+        char_class=class_match.group(1).strip(),
+        level=1,
+        hp=int(hp_match.group(1)),
+        hp_max=int(hp_match.group(1)),
+        ac=int(ac_match.group(1)),
+        stats=Stats(
+            str=int(stats_match.group(1)),
+            int=int(stats_match.group(2)),
+            wis=int(stats_match.group(3)),
+            dex=int(stats_match.group(4)),
+            con=int(stats_match.group(5)),
+            cha=int(stats_match.group(6)),
+        ),
+        equipment=equipment,
+        gold=0,
+    )
