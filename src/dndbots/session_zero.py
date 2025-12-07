@@ -4,7 +4,11 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+
 from dndbots.models import Character, Stats
+from dndbots.rules_tools import create_rules_tools
 
 
 @dataclass
@@ -199,3 +203,49 @@ def parse_character(text: str) -> Character | None:
         equipment=equipment,
         gold=0,
     )
+
+
+class SessionZero:
+    """Orchestrates Session Zero: collaborative campaign creation."""
+
+    def __init__(
+        self,
+        num_players: int = 3,
+        dm_model: str = "gpt-4o",
+        player_model: str = "gpt-4o",
+    ):
+        """Initialize Session Zero with DM and player agents.
+
+        Args:
+            num_players: Number of player agents (default: 3)
+            dm_model: Model for DM agent
+            player_model: Model for player agents
+        """
+        self.num_players = num_players
+
+        # Create rules tools (shared by all agents)
+        lookup, list_rules, search = create_rules_tools()
+        tools = [lookup, list_rules, search]
+
+        # Create DM agent
+        dm_client = OpenAIChatCompletionClient(model=dm_model)
+        self.dm = AssistantAgent(
+            name="dm",
+            model_client=dm_client,
+            system_message=build_session_zero_dm_prompt(),
+            tools=tools,
+            reflect_on_tool_use=True,
+        )
+
+        # Create player agents
+        self.players = []
+        for i in range(num_players):
+            player_client = OpenAIChatCompletionClient(model=player_model)
+            player = AssistantAgent(
+                name=f"player_{i + 1}",
+                model_client=player_client,
+                system_message=build_session_zero_player_prompt(i + 1),
+                tools=tools,
+                reflect_on_tool_use=True,
+            )
+            self.players.append(player)

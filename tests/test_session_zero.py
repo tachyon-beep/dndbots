@@ -1,5 +1,6 @@
 """Tests for Session Zero."""
 
+import os
 import pytest
 from dndbots.session_zero import (
     SessionZeroResult,
@@ -10,6 +11,13 @@ from dndbots.session_zero import (
     parse_character,
 )
 from dndbots.models import Character, Stats
+
+
+# Mock API key for tests
+@pytest.fixture(autouse=True)
+def mock_openai_key(monkeypatch):
+    """Set a dummy OpenAI API key for testing."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-for-unit-tests")
 
 
 class TestSessionZeroResult:
@@ -142,3 +150,25 @@ That's my character!"""
         text = "No character here"
         result = parse_character(text)
         assert result is None
+
+
+class TestSessionZeroClass:
+    def test_session_zero_init(self):
+        """SessionZero initializes with agents."""
+        from dndbots.session_zero import SessionZero
+
+        sz = SessionZero(num_players=3)
+        assert sz.dm is not None
+        assert len(sz.players) == 3
+        assert sz.num_players == 3
+
+    def test_session_zero_agents_have_tools(self):
+        """All agents have rules tools."""
+        from dndbots.session_zero import SessionZero
+
+        sz = SessionZero(num_players=2)
+        # DM should have tools
+        assert len(sz.dm._tools) == 3
+        # Players should have tools
+        for player in sz.players:
+            assert len(player._tools) == 3
