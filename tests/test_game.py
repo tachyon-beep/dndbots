@@ -319,3 +319,44 @@ class TestGameEventBus:
         assert game._event_bus is custom_bus
         assert len(game._event_bus.plugins) == 1
         assert game._event_bus.plugins[0].name == "test"
+
+
+class TestDnDGamePartyDocument:
+    def test_game_accepts_party_document(self):
+        """DnDGame accepts optional party_document."""
+        char = Character(
+            name="Test",
+            char_class="Fighter",
+            level=1,
+            hp=8,
+            hp_max=8,
+            ac=5,
+            stats=Stats(str=14, dex=12, con=13, int=10, wis=11, cha=9),
+            equipment=[],
+            gold=0,
+        )
+        game = DnDGame(
+            scenario="Test scenario",
+            characters=[char],
+            party_document="## Relationships\n- Test content",
+        )
+        assert game.party_document == "## Relationships\n- Test content"
+
+    def test_game_works_without_party_document(self):
+        """DnDGame works when party_document is None."""
+        char = Character(
+            name="Test",
+            char_class="Fighter",
+            level=1,
+            hp=8,
+            hp_max=8,
+            ac=5,
+            stats=Stats(str=14, dex=12, con=13, int=10, wis=11, cha=9),
+            equipment=[],
+            gold=0,
+        )
+        game = DnDGame(
+            scenario="Test scenario",
+            characters=[char],
+        )
+        assert game.party_document is None

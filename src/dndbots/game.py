@@ -21,6 +21,7 @@ def create_dm_agent(
     scenario: str,
     model: str = "gpt-4o",
     enable_rules_tools: bool = True,
+    party_document: str | None = None,
 ) -> AssistantAgent:
     """Create the Dungeon Master agent.
 
@@ -28,6 +29,7 @@ def create_dm_agent(
         scenario: The adventure scenario
         model: OpenAI model to use
         enable_rules_tools: Enable rules lookup tools (default: True)
+        party_document: Optional party background from Session Zero
 
     Returns:
         Configured DM agent with optional rules tools
@@ -43,7 +45,7 @@ def create_dm_agent(
     return AssistantAgent(
         name="dm",
         model_client=model_client,
-        system_message=build_dm_prompt(scenario),
+        system_message=build_dm_prompt(scenario, party_document=party_document),
         tools=tools,
         reflect_on_tool_use=True,  # Summarize tool output naturally
     )
@@ -52,12 +54,16 @@ def create_dm_agent(
 def create_player_agent(
     character: Character,
     model: str = "gpt-4o",
+    memory: str | None = None,
+    party_document: str | None = None,
 ) -> AssistantAgent:
     """Create a player agent for a character.
 
     Args:
         character: The character to play
         model: OpenAI model to use
+        memory: Optional DCML memory block
+        party_document: Optional party background from Session Zero
 
     Returns:
         Configured player agent
@@ -67,7 +73,7 @@ def create_player_agent(
     return AssistantAgent(
         name=character.name,
         model_client=model_client,
-        system_message=build_player_prompt(character),
+        system_message=build_player_prompt(character, memory=memory, party_document=party_document),
     )
 
 
@@ -108,6 +114,7 @@ class DnDGame:
         campaign: Campaign | None = None,
         enable_memory: bool = True,
         event_bus: EventBus | None = None,
+        party_document: str | None = None,
     ):
         """Initialize a game session.
 
@@ -119,10 +126,12 @@ class DnDGame:
             campaign: Optional campaign for persistence
             enable_memory: Enable DCML memory projection (default: True)
             event_bus: Optional event bus for output (default: ConsolePlugin)
+            party_document: Optional party background from Session Zero
         """
         self.scenario = scenario
         self.characters = characters
         self.campaign = campaign
+        self.party_document = party_document
         self._memory_builder = MemoryBuilder() if enable_memory else None
 
         # Initialize event bus (default to console output)
@@ -132,9 +141,9 @@ class DnDGame:
         self._event_bus = event_bus
 
         # Create agents
-        self.dm = create_dm_agent(scenario, dm_model)
+        self.dm = create_dm_agent(scenario, dm_model, party_document=party_document)
         self.players = [
-            create_player_agent(char, player_model)
+            create_player_agent(char, player_model, party_document=party_document)
             for char in characters
         ]
 
