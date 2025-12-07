@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any
 
 from autogen_agentchat.agents import AssistantAgent
@@ -19,6 +20,34 @@ class SessionZeroResult:
     characters: list[Character]
     party_document: str
     transcript: list[Any]  # Message objects from AutoGen
+
+
+class Phase(Enum):
+    """Session Zero phases."""
+
+    PITCH = "pitch"
+    CONVERGE = "converge"
+    LOCK = "lock"
+    DONE = "done"
+
+
+def detect_phase_marker(text: str) -> Phase | None:
+    """Detect phase transition marker in message.
+
+    Args:
+        text: Message text to scan
+
+    Returns:
+        Next phase if marker found, None otherwise
+    """
+    text_upper = text.upper()
+    if "SESSION ZERO LOCKED" in text_upper:
+        return Phase.DONE
+    if "CONVERGENCE COMPLETE" in text_upper:
+        return Phase.LOCK
+    if "PITCH COMPLETE" in text_upper:
+        return Phase.CONVERGE
+    return None
 
 
 def build_session_zero_dm_prompt() -> str:

@@ -172,3 +172,54 @@ class TestSessionZeroClass:
         # Players should have tools
         for player in sz.players:
             assert len(player._tools) == 3
+
+
+class TestPhaseDetection:
+    def test_phase_enum_exists(self):
+        """Phase enum has expected values."""
+        from dndbots.session_zero import Phase
+
+        assert Phase.PITCH.value == "pitch"
+        assert Phase.CONVERGE.value == "converge"
+        assert Phase.LOCK.value == "lock"
+        assert Phase.DONE.value == "done"
+
+    def test_detect_pitch_complete(self):
+        """Detect PITCH COMPLETE marker."""
+        from dndbots.session_zero import detect_phase_marker, Phase
+
+        text = "Great ideas everyone! PITCH COMPLETE"
+        result = detect_phase_marker(text)
+        assert result == Phase.CONVERGE
+
+    def test_detect_convergence_complete(self):
+        """Detect CONVERGENCE COMPLETE marker."""
+        from dndbots.session_zero import detect_phase_marker, Phase
+
+        text = "The party is taking shape. CONVERGENCE COMPLETE"
+        result = detect_phase_marker(text)
+        assert result == Phase.LOCK
+
+    def test_detect_session_zero_locked(self):
+        """Detect SESSION ZERO LOCKED marker."""
+        from dndbots.session_zero import detect_phase_marker, Phase
+
+        text = "Everything is finalized. SESSION ZERO LOCKED"
+        result = detect_phase_marker(text)
+        assert result == Phase.DONE
+
+    def test_detect_no_marker(self):
+        """Return None when no marker present."""
+        from dndbots.session_zero import detect_phase_marker
+
+        text = "Just regular conversation here."
+        result = detect_phase_marker(text)
+        assert result is None
+
+    def test_detect_marker_case_insensitive(self):
+        """Markers should work regardless of case."""
+        from dndbots.session_zero import detect_phase_marker, Phase
+
+        text = "pitch complete"
+        result = detect_phase_marker(text)
+        assert result == Phase.CONVERGE
