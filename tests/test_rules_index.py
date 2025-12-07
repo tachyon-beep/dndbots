@@ -1,7 +1,7 @@
 """Tests for rules index and data models."""
 
 import pytest
-from dndbots.rules_index import RulesEntry, MonsterEntry
+from dndbots.rules_index import RulesEntry, MonsterEntry, SpellEntry
 
 
 class TestRulesEntry:
@@ -102,3 +102,53 @@ class TestMonsterEntry:
             special_abilities=[],
         )
         assert isinstance(monster, RulesEntry)
+
+
+class TestSpellEntry:
+    def test_spell_entry_creation(self):
+        """SpellEntry includes spell-specific fields."""
+        spell = SpellEntry(
+            path="spells/cleric/1/cure_light_wounds",
+            name="Cure Light Wounds",
+            category="spell",
+            ruleset="basic",
+            source_file="becmi_players_manual.txt",
+            source_lines=(3500, 3520),
+            tags=["healing", "cleric"],
+            related=["spells/cleric/1/cause_light_wounds"],
+            summary="Touch, heal 1d6+1 hp",
+            full_text="By placing hands on a wounded creature...",
+            stat_block="Range: Touch, Duration: Permanent, Effect: 1 creature",
+            spell_class="cleric",
+            spell_level=1,
+            range="Touch",
+            duration="Permanent",
+            reversible=True,
+            reverse_name="Cause Light Wounds",
+        )
+        assert spell.spell_class == "cleric"
+        assert spell.spell_level == 1
+        assert spell.reversible is True
+        assert spell.reverse_name == "Cause Light Wounds"
+
+    def test_spell_entry_non_reversible(self):
+        """SpellEntry handles non-reversible spells."""
+        spell = SpellEntry(
+            path="spells/magic_user/1/magic_missile",
+            name="Magic Missile",
+            category="spell",
+            ruleset="basic",
+            source_file="becmi_players_manual.txt",
+            source_lines=(3600, 3620),
+            tags=["damage", "magic-user", "auto-hit"],
+            related=[],
+            summary="150', auto-hit, 2d6+1 damage",
+            full_text="A glowing arrow of energy...",
+            spell_class="magic-user",
+            spell_level=1,
+            range="150'",
+            duration="Instantaneous",
+            reversible=False,
+        )
+        assert spell.reversible is False
+        assert spell.reverse_name is None

@@ -49,3 +49,15 @@ class MonsterEntry(RulesEntry):
     alignment: str = "Neutral"  # Alignment
     xp: int = 0  # XP value
     special_abilities: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SpellEntry(RulesEntry):
+    """Extended metadata for spell entries."""
+
+    spell_class: str = "magic-user"  # "cleric", "magic-user", "elf"
+    spell_level: int = 1  # 1-5 for Basic
+    range: str = "0"  # "Touch", "120'", "0 (caster only)"
+    duration: str = "Instantaneous"  # "Permanent", "2 turns", "1 round/level"
+    reversible: bool = False  # Can be reversed
+    reverse_name: str | None = None  # "Cause Light Wounds"
