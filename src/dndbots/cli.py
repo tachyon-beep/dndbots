@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from dndbots.campaign import Campaign
 from dndbots.game import DnDGame
 from dndbots.models import Character, Stats
+from dndbots.session_zero import SessionZero
 
 
 # Default paths
@@ -47,8 +48,12 @@ def create_default_character() -> Character:
     )
 
 
-async def run_game() -> None:
-    """Run the game with persistence."""
+async def run_game(session_zero: bool = False) -> None:
+    """Run the game with persistence.
+
+    Args:
+        session_zero: If True, run Session Zero for collaborative creation
+    """
     # Ensure data directory exists
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -61,12 +66,41 @@ async def run_game() -> None:
     await campaign.initialize()
 
     try:
-        # Get or create character
-        characters = await campaign.get_characters()
-        if not characters:
-            char = create_default_character()
-            await campaign.add_character(char)
-            characters = [char]
+        # Handle session zero vs. normal flow
+        if session_zero:
+            print("\n" + "=" * 60)
+            print("Starting Session Zero...")
+            print("=" * 60 + "\n")
+
+            sz = SessionZero(num_players=3)
+            result = await sz.run()
+
+            print("\n" + "=" * 60)
+            print("SESSION ZERO COMPLETE")
+            print("=" * 60)
+            print(f"\nScenario: {result.scenario[:100]}...")
+            print(f"Characters: {', '.join(c.name for c in result.characters)}")
+            print(f"\nParty Document:\n{result.party_document[:200]}...")
+            print()
+
+            # Use session zero outputs
+            characters = result.characters
+            scenario = result.scenario
+            party_document = result.party_document
+
+            # Add characters to campaign
+            for char in characters:
+                await campaign.add_character(char)
+        else:
+            # Get or create character (existing flow)
+            characters = await campaign.get_characters()
+            if not characters:
+                char = create_default_character()
+                await campaign.add_character(char)
+                characters = [char]
+
+            scenario = DEFAULT_SCENARIO
+            party_document = None
 
         # Start session
         await campaign.start_session()
@@ -78,11 +112,12 @@ async def run_game() -> None:
 
         # Create and run game
         game = DnDGame(
-            scenario=DEFAULT_SCENARIO,
+            scenario=scenario,
             characters=characters,
             dm_model="gpt-4o",
             player_model="gpt-4o",
             campaign=campaign,
+            party_document=party_document,
         )
 
         await game.run()
@@ -117,6 +152,11 @@ def main() -> None:
 
     # 'run' command (default behavior)
     run_parser = subparsers.add_parser("run", help="Run a game session")
+    run_parser.add_argument(
+        "--session-zero",
+        action="store_true",
+        help="Run Session Zero for collaborative campaign/character creation",
+    )
 
     # 'serve' command
     serve_parser = subparsers.add_parser("serve", help="Start admin UI server")
@@ -148,8 +188,11 @@ def main() -> None:
         print(f"\nData directory: {DATA_DIR}")
         print("Type Ctrl+C to stop\n")
 
+        # Get session_zero flag if present
+        session_zero = getattr(args, 'session_zero', False)
+
         try:
-            asyncio.run(run_game())
+            asyncio.run(run_game(session_zero=session_zero))
         except KeyboardInterrupt:
             print("\n\n[System] Session interrupted by user.")
 
