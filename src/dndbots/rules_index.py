@@ -1,6 +1,8 @@
 """Rules index for BECMI D&D content."""
 
+import json
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -97,3 +99,115 @@ class RulesMatch:
     category: str
     relevance: float  # 0.0-1.0 match score
     snippet: str  # Matching excerpt
+
+
+class RulesIndex:
+    """Index of all BECMI rules content."""
+
+    def __init__(self, rules_dir: Path):
+        """Load rules from indexed JSON files.
+
+        Args:
+            rules_dir: Path to rules/ directory containing indexed/ subdirectory
+        """
+        self._entries: dict[str, RulesEntry] = {}
+        self._rules_dir = rules_dir
+
+        indexed_dir = rules_dir / "indexed"
+        if indexed_dir.exists():
+            self._load_indexed(indexed_dir)
+
+    def _load_indexed(self, indexed_dir: Path) -> None:
+        """Load all indexed JSON files."""
+        for ruleset_dir in indexed_dir.iterdir():
+            if ruleset_dir.is_dir():
+                self._load_ruleset(ruleset_dir)
+
+    def _load_ruleset(self, ruleset_dir: Path) -> None:
+        """Load all JSON files in a ruleset directory."""
+        for json_file in ruleset_dir.glob("*.json"):
+            if json_file.name.startswith("_"):
+                continue  # Skip manifest files
+            self._load_json_file(json_file)
+
+    def _load_json_file(self, json_file: Path) -> None:
+        """Load entries from a single JSON file."""
+        data = json.loads(json_file.read_text())
+        for key, entry_data in data.items():
+            entry = self._parse_entry(entry_data)
+            self._entries[entry.path] = entry
+
+    def _parse_entry(self, data: dict) -> RulesEntry:
+        """Parse a JSON entry into the appropriate dataclass."""
+        category = data.get("category", "")
+
+        if category == "monster":
+            return MonsterEntry(
+                path=data["path"],
+                name=data["name"],
+                category=data["category"],
+                ruleset=data["ruleset"],
+                source_file=data["source_file"],
+                source_lines=tuple(data["source_lines"]),
+                tags=data.get("tags", []),
+                related=data.get("related", []),
+                summary=data["summary"],
+                full_text=data["full_text"],
+                min_level=data.get("min_level"),
+                max_level=data.get("max_level"),
+                stat_block=data.get("stat_block"),
+                ac=data.get("ac", 9),
+                hd=data.get("hd", "1"),
+                move=data.get("move", "60' (20')"),
+                attacks=data.get("attacks", "1"),
+                damage=data.get("damage", "1d6"),
+                no_appearing=data.get("no_appearing", "1"),
+                save_as=data.get("save_as", "F1"),
+                morale=data.get("morale", 6),
+                treasure_type=data.get("treasure_type", "None"),
+                alignment=data.get("alignment", "Neutral"),
+                xp=data.get("xp", 0),
+                special_abilities=data.get("special_abilities", []),
+            )
+        elif category == "spell":
+            return SpellEntry(
+                path=data["path"],
+                name=data["name"],
+                category=data["category"],
+                ruleset=data["ruleset"],
+                source_file=data["source_file"],
+                source_lines=tuple(data["source_lines"]),
+                tags=data.get("tags", []),
+                related=data.get("related", []),
+                summary=data["summary"],
+                full_text=data["full_text"],
+                min_level=data.get("min_level"),
+                max_level=data.get("max_level"),
+                stat_block=data.get("stat_block"),
+                spell_class=data.get("spell_class", "magic-user"),
+                spell_level=data.get("spell_level", 1),
+                range=data.get("range", "0"),
+                duration=data.get("duration", "Instantaneous"),
+                reversible=data.get("reversible", False),
+                reverse_name=data.get("reverse_name"),
+            )
+        else:
+            return RulesEntry(
+                path=data["path"],
+                name=data["name"],
+                category=data["category"],
+                ruleset=data["ruleset"],
+                source_file=data["source_file"],
+                source_lines=tuple(data["source_lines"]),
+                tags=data.get("tags", []),
+                related=data.get("related", []),
+                summary=data["summary"],
+                full_text=data["full_text"],
+                min_level=data.get("min_level"),
+                max_level=data.get("max_level"),
+                stat_block=data.get("stat_block"),
+            )
+
+    def get(self, path: str) -> RulesEntry | None:
+        """Get an entry by path."""
+        return self._entries.get(path)

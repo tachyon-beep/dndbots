@@ -1,7 +1,11 @@
 """Tests for rules index and data models."""
 
+import json
+import tempfile
+from pathlib import Path
+
 import pytest
-from dndbots.rules_index import RulesEntry, MonsterEntry, SpellEntry, RulesResult, RulesIndexEntry, RulesMatch
+from dndbots.rules_index import RulesEntry, MonsterEntry, SpellEntry, RulesResult, RulesIndexEntry, RulesMatch, RulesIndex
 
 
 class TestRulesEntry:
@@ -194,3 +198,55 @@ class TestResultTypes:
         )
         assert match.relevance == 0.85
         assert "paralyze" in match.snippet.lower()
+
+
+class TestRulesIndex:
+    def test_load_from_directory(self):
+        """RulesIndex loads entries from indexed JSON files."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create test fixture
+            index_dir = Path(tmpdir) / "indexed" / "basic"
+            index_dir.mkdir(parents=True)
+
+            monsters = {
+                "goblin": {
+                    "path": "monsters/goblin",
+                    "name": "Goblin",
+                    "category": "monster",
+                    "ruleset": "basic",
+                    "source_file": "becmi_dm_rulebook.txt",
+                    "source_lines": [2456, 2489],
+                    "tags": ["humanoid", "chaotic"],
+                    "related": ["monsters/hobgoblin"],
+                    "summary": "Small chaotic humanoids",
+                    "full_text": "Goblins are...",
+                    "stat_block": "AC6 HD1-1",
+                    "ac": 6,
+                    "hd": "1-1",
+                    "move": "90' (30')",
+                    "attacks": "1 weapon",
+                    "damage": "By weapon",
+                    "no_appearing": "2-8",
+                    "save_as": "Normal Man",
+                    "morale": 7,
+                    "treasure_type": "C",
+                    "alignment": "Chaotic",
+                    "xp": 5,
+                    "special_abilities": ["infravision 90'"],
+                }
+            }
+            (index_dir / "monsters.json").write_text(json.dumps(monsters))
+
+            rules = RulesIndex(Path(tmpdir))
+            assert rules.get("monsters/goblin") is not None
+            assert rules.get("monsters/goblin").name == "Goblin"
+
+    def test_get_nonexistent_returns_none(self):
+        """RulesIndex.get() returns None for missing entries."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index_dir = Path(tmpdir) / "indexed" / "basic"
+            index_dir.mkdir(parents=True)
+            (index_dir / "monsters.json").write_text("{}")
+
+            rules = RulesIndex(Path(tmpdir))
+            assert rules.get("monsters/dragon") is None
