@@ -144,3 +144,291 @@ class MoraleResult:
     roll: int
     needed: int
     narrative: str
+
+
+class MechanicsEngine:
+    """Core mechanics engine for D&D rules adjudication.
+
+    This class manages combat state, tracks combatants, and resolves
+    mechanical actions (attacks, saves, checks, etc.). It serves as the
+    backend for the Referee agent.
+
+    Attributes:
+        combat: Current combat state (None when not in combat)
+        pcs: Persistent PC state across combats
+        debug_mode: If True, show micro-queries and internal state
+    """
+
+    def __init__(self, debug_mode: bool = True):
+        """Initialize the mechanics engine.
+
+        Args:
+            debug_mode: If True, show micro-queries and internal operations
+        """
+        self.combat: CombatState | None = None
+        self.pcs: dict[str, Combatant] = {}
+        self.debug_mode = debug_mode
+
+    # Combat lifecycle methods
+
+    def start_combat(self, style: str = "soft") -> None:
+        """Initialize combat state.
+
+        Args:
+            style: "soft" (flexible turn order) or "strict" (enforced initiative)
+
+        Raises:
+            ValueError: If combat is already active
+        """
+        if self.combat is not None:
+            raise ValueError("Combat already in progress")
+
+        self.combat = CombatState(combat_style=style)
+
+    def add_combatant(
+        self,
+        id: str,
+        name: str,
+        hp: int,
+        hp_max: int,
+        ac: int,
+        thac0: int,
+        damage_dice: str,
+        char_class: str,
+        level: int,
+        is_pc: bool = False,
+    ) -> Combatant:
+        """Add a combatant to the current combat.
+
+        Args:
+            id: Unique identifier (e.g., "pc_throk", "goblin_01")
+            name: Display name
+            hp: Current hit points
+            hp_max: Maximum hit points
+            ac: Armor Class
+            thac0: To Hit AC 0 value
+            damage_dice: Damage dice notation (e.g., "1d8+2")
+            char_class: Class for save lookups (e.g., "fighter", "goblin")
+            level: Level for save lookups
+            is_pc: True if this is a player character
+
+        Returns:
+            The created Combatant
+
+        Raises:
+            RuntimeError: If combat is not active
+            ValueError: If combatant ID already exists in combat
+        """
+        if self.combat is None:
+            raise RuntimeError("Cannot add combatant: combat not started")
+
+        if id in self.combat.combatants:
+            raise ValueError(f"Combatant {id} already exists in combat")
+
+        combatant = Combatant(
+            id=id,
+            name=name,
+            hp=hp,
+            hp_max=hp_max,
+            ac=ac,
+            thac0=thac0,
+            damage_dice=damage_dice,
+            char_class=char_class,
+            level=level,
+            is_pc=is_pc,
+        )
+
+        self.combat.combatants[id] = combatant
+
+        # Update persistent PC state
+        if is_pc:
+            self.pcs[id] = combatant
+
+        return combatant
+
+    def end_combat(self) -> dict:
+        """End combat, persist PC HP, and return summary.
+
+        Returns:
+            Summary dict with combat statistics and final state
+
+        Raises:
+            RuntimeError: If combat is not active
+        """
+        if self.combat is None:
+            raise RuntimeError("Cannot end combat: no active combat")
+
+        # Build summary
+        summary = {
+            "rounds": self.combat.round_number,
+            "combatants": len(self.combat.combatants),
+            "survivors": sum(1 for c in self.combat.combatants.values() if c.hp > 0),
+            "casualties": sum(1 for c in self.combat.combatants.values() if c.hp <= 0),
+        }
+
+        # Persist PC HP to permanent state
+        for id, combatant in self.combat.combatants.items():
+            if combatant.is_pc:
+                self.pcs[id] = combatant
+
+        # Clear combat state
+        self.combat = None
+
+        return summary
+
+    def get_combat_status(self) -> dict | None:
+        """Get current combat status with all combatants.
+
+        Returns:
+            Dict with combat state, or None if not in combat
+        """
+        if self.combat is None:
+            return None
+
+        return {
+            "round": self.combat.round_number,
+            "style": self.combat.combat_style,
+            "current_turn": self.combat.current_turn,
+            "combatants": {
+                id: {
+                    "name": c.name,
+                    "hp": c.hp,
+                    "hp_max": c.hp_max,
+                    "ac": c.ac,
+                    "conditions": list(c.conditions),
+                    "is_pc": c.is_pc,
+                }
+                for id, c in self.combat.combatants.items()
+            },
+        }
+
+    def get_combatant(self, id: str) -> Combatant | None:
+        """Get a single combatant by ID.
+
+        Args:
+            id: Combatant identifier
+
+        Returns:
+            Combatant if found, None otherwise
+        """
+        if self.combat is None:
+            return None
+        return self.combat.combatants.get(id)
+
+    # Resolution methods (stubbed for later implementation)
+
+    def roll_attack(
+        self, attacker: str, target: str, modifier: int = 0
+    ) -> AttackResult:
+        """Resolve an attack roll.
+
+        Args:
+            attacker: ID of attacking combatant
+            target: ID of target combatant
+            modifier: Additional modifier to attack roll
+
+        Returns:
+            AttackResult with outcome
+
+        Raises:
+            NotImplementedError: Not yet implemented
+        """
+        raise NotImplementedError("roll_attack not yet implemented")
+
+    def roll_damage(
+        self,
+        attacker: str,
+        target: str,
+        damage_dice: str | None = None,
+        modifier: int = 0,
+    ) -> DamageResult:
+        """Roll and apply damage.
+
+        Args:
+            attacker: ID of attacking combatant
+            target: ID of target combatant
+            damage_dice: Override damage dice (uses attacker's default if None)
+            modifier: Additional damage modifier
+
+        Returns:
+            DamageResult with damage dealt and target status
+
+        Raises:
+            NotImplementedError: Not yet implemented
+        """
+        raise NotImplementedError("roll_damage not yet implemented")
+
+    def roll_save(
+        self, target: str, save_type: str, modifier: int = 0
+    ) -> SaveResult:
+        """Resolve a saving throw.
+
+        Args:
+            target: ID of combatant making save
+            save_type: Type of save (e.g., "Death", "Wands", "Paralysis")
+            modifier: Additional modifier to save roll
+
+        Returns:
+            SaveResult with outcome
+
+        Raises:
+            NotImplementedError: Not yet implemented
+        """
+        raise NotImplementedError("roll_save not yet implemented")
+
+    def roll_ability_check(
+        self, target: str, ability: str, difficulty: int, modifier: int = 0
+    ) -> CheckResult:
+        """Resolve an ability check.
+
+        Args:
+            target: ID of combatant making check
+            ability: Ability to check (e.g., "str", "dex", "wis")
+            difficulty: Target number to beat
+            modifier: Additional modifier to check roll
+
+        Returns:
+            CheckResult with outcome
+
+        Raises:
+            NotImplementedError: Not yet implemented
+        """
+        raise NotImplementedError("roll_ability_check not yet implemented")
+
+    def roll_morale(self, target: str) -> MoraleResult:
+        """Resolve a morale check (BECMI rules).
+
+        Args:
+            target: ID of combatant making morale check
+
+        Returns:
+            MoraleResult with outcome
+
+        Raises:
+            NotImplementedError: Not yet implemented
+        """
+        raise NotImplementedError("roll_morale not yet implemented")
+
+    def add_condition(self, target: str, condition: str) -> None:
+        """Apply a condition to a combatant.
+
+        Args:
+            target: ID of combatant
+            condition: Condition to add (e.g., "prone", "poisoned")
+
+        Raises:
+            NotImplementedError: Not yet implemented
+        """
+        raise NotImplementedError("add_condition not yet implemented")
+
+    def remove_condition(self, target: str, condition: str) -> None:
+        """Remove a condition from a combatant.
+
+        Args:
+            target: ID of combatant
+            condition: Condition to remove
+
+        Raises:
+            NotImplementedError: Not yet implemented
+        """
+        raise NotImplementedError("remove_condition not yet implemented")
