@@ -61,3 +61,39 @@ class SpellEntry(RulesEntry):
     duration: str = "Instantaneous"  # "Permanent", "2 turns", "1 round/level"
     reversible: bool = False  # Can be reversed
     reverse_name: str | None = None  # "Cause Light Wounds"
+
+
+@dataclass
+class RulesResult:
+    """Result from get_rules() lookup."""
+
+    path: str
+    name: str
+    category: str
+    ruleset: str
+    content: str  # Formatted based on detail level
+    metadata: dict  # All entry fields as dict
+    related: list[str]  # Suggested related paths
+    source_reference: str  # "becmi_dm_rulebook.txt:2456-2489"
+
+
+@dataclass
+class RulesIndexEntry:
+    """Entry in list_rules() results."""
+
+    path: str
+    name: str
+    summary: str
+    tags: list[str]
+    stat_preview: str | None = None  # One-line stat summary if applicable
+
+
+@dataclass
+class RulesMatch:
+    """Search result from search_rules()."""
+
+    path: str
+    name: str
+    category: str
+    relevance: float  # 0.0-1.0 match score
+    snippet: str  # Matching excerpt

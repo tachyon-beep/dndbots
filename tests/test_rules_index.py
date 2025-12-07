@@ -1,7 +1,7 @@
 """Tests for rules index and data models."""
 
 import pytest
-from dndbots.rules_index import RulesEntry, MonsterEntry, SpellEntry
+from dndbots.rules_index import RulesEntry, MonsterEntry, SpellEntry, RulesResult, RulesIndexEntry, RulesMatch
 
 
 class TestRulesEntry:
@@ -152,3 +152,45 @@ class TestSpellEntry:
         )
         assert spell.reversible is False
         assert spell.reverse_name is None
+
+
+class TestResultTypes:
+    def test_rules_result_creation(self):
+        """RulesResult contains full lookup result."""
+        result = RulesResult(
+            path="monsters/goblin",
+            name="Goblin",
+            category="monster",
+            ruleset="basic",
+            content="AC6 HD1-1 Mv90'...",
+            metadata={"ac": 6, "hd": "1-1", "xp": 5},
+            related=["monsters/hobgoblin"],
+            source_reference="becmi_dm_rulebook.txt:2456-2489",
+        )
+        assert result.path == "monsters/goblin"
+        assert result.metadata["ac"] == 6
+        assert "2456" in result.source_reference
+
+    def test_rules_index_entry_creation(self):
+        """RulesIndexEntry for list results."""
+        entry = RulesIndexEntry(
+            path="monsters/ghoul",
+            name="Ghoul",
+            summary="HD2, AC6, paralyze touch",
+            tags=["undead", "paralyze"],
+            stat_preview="AC6 HD2 ML9 XP25",
+        )
+        assert entry.path == "monsters/ghoul"
+        assert "paralyze" in entry.tags
+
+    def test_rules_match_creation(self):
+        """RulesMatch for search results."""
+        match = RulesMatch(
+            path="monsters/ghoul",
+            name="Ghoul",
+            category="monster",
+            relevance=0.85,
+            snippet="...paralyze on touch, save vs Paralysis...",
+        )
+        assert match.relevance == 0.85
+        assert "paralyze" in match.snippet.lower()
