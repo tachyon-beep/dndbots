@@ -143,3 +143,35 @@ class TestDmPromptWithRulesIndex:
         prompt = build_dm_prompt("Test scenario")
         # Should still have basic rules
         assert "THAC0" in prompt or "COMBAT" in prompt
+
+
+class TestPartyDocumentIntegration:
+    def test_dm_prompt_includes_party_document(self):
+        """DM prompt includes party document when provided."""
+        party_doc = "## Relationships\n- Kira and Marcus share history"
+        prompt = build_dm_prompt("Test scenario", party_document=party_doc)
+        assert "Relationships" in prompt
+        assert "Kira and Marcus" in prompt
+
+    def test_dm_prompt_works_without_party_document(self):
+        """DM prompt works when party_document is None."""
+        prompt = build_dm_prompt("Test scenario", party_document=None)
+        assert "Test scenario" in prompt
+
+    def test_player_prompt_includes_party_document(self):
+        """Player prompt includes party document when provided."""
+        char = Character(
+            name="Test",
+            char_class="Fighter",
+            level=1,
+            hp=8,
+            hp_max=8,
+            ac=5,
+            stats=Stats(str=14, dex=12, con=13, int=10, wis=11, cha=9),
+            equipment=[],
+            gold=0,
+        )
+        party_doc = "## Shared Goals\n- Stop the cult"
+        prompt = build_player_prompt(char, party_document=party_doc)
+        assert "Shared Goals" in prompt
+        assert "Stop the cult" in prompt

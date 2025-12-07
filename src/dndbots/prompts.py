@@ -22,12 +22,14 @@ Below is your compressed memory in DCML (D&D Condensed Memory Language).
 def build_dm_prompt(
     scenario: str,
     rules_index: RulesIndex | None = None,
+    party_document: str | None = None,
 ) -> str:
     """Build the Dungeon Master system prompt.
 
     Args:
         scenario: The adventure scenario/setup
         rules_index: Optional loaded rules index for expanded summary
+        party_document: Optional party background from Session Zero
 
     Returns:
         Complete DM system prompt
@@ -38,13 +40,21 @@ def build_dm_prompt(
     else:
         rules_section = RULES_SHORTHAND
 
+    party_section = ""
+    if party_document:
+        party_section = f"""
+
+=== PARTY BACKGROUND ===
+{party_document}
+"""
+
     return f"""You are the Dungeon Master for a Basic D&D (1983 Red Box) campaign.
 
 {rules_section}
 
 === YOUR SCENARIO ===
 {scenario}
-
+{party_section}
 === DM GUIDELINES ===
 - Describe scenes vividly but concisely
 - Ask players what they want to do, don't assume actions
@@ -62,12 +72,17 @@ When you need to end the session or pause, say "SESSION PAUSE" clearly.
 """
 
 
-def build_player_prompt(character: Character, memory: str | None = None) -> str:
+def build_player_prompt(
+    character: Character,
+    memory: str | None = None,
+    party_document: str | None = None,
+) -> str:
     """Build a player agent system prompt.
 
     Args:
         character: The character this agent plays
         memory: Optional DCML memory block to include
+        party_document: Optional party background from Session Zero
 
     Returns:
         Complete player system prompt
@@ -84,6 +99,13 @@ def build_player_prompt(character: Character, memory: str | None = None) -> str:
             "",
             DCML_GUIDE,
             memory,
+        ])
+
+    if party_document:
+        sections.extend([
+            "",
+            "=== PARTY BACKGROUND ===",
+            party_document,
         ])
 
     sections.extend([
