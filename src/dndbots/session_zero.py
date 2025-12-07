@@ -182,6 +182,22 @@ def parse_party_document(text: str) -> str:
     return ""
 
 
+def get_content_as_string(msg: Any) -> str:
+    """Extract message content as a string, handling list-type content.
+
+    Args:
+        msg: Message object with content attribute
+
+    Returns:
+        Content as a string
+    """
+    content = msg.content
+    if isinstance(content, list):
+        # Join list items that are strings/convertible to strings
+        return " ".join(str(item) for item in content)
+    return str(content) if content else ""
+
+
 def parse_character(text: str) -> Character | None:
     """Parse character from [CHARACTER]...[/CHARACTER] block.
 
@@ -318,9 +334,9 @@ class SessionZero:
         for msg in reversed(transcript):
             if msg.source == "dm":
                 if not scenario:
-                    scenario = parse_scenario(msg.content)
+                    scenario = parse_scenario(get_content_as_string(msg))
                 if not party_document:
-                    party_document = parse_party_document(msg.content)
+                    party_document = parse_party_document(get_content_as_string(msg))
                 if scenario and party_document:
                     break
 
@@ -328,7 +344,7 @@ class SessionZero:
         seen_players: set[str] = set()
         for msg in reversed(transcript):
             if msg.source.startswith("player_") and msg.source not in seen_players:
-                char = parse_character(msg.content)
+                char = parse_character(get_content_as_string(msg))
                 if char:
                     characters.append(char)
                     seen_players.add(msg.source)
