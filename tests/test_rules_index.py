@@ -1,7 +1,7 @@
 """Tests for rules index and data models."""
 
 import pytest
-from dndbots.rules_index import RulesEntry
+from dndbots.rules_index import RulesEntry, MonsterEntry
 
 
 class TestRulesEntry:
@@ -40,3 +40,65 @@ class TestRulesEntry:
         assert entry.min_level is None
         assert entry.max_level is None
         assert entry.stat_block is None
+
+
+class TestMonsterEntry:
+    def test_monster_entry_creation(self):
+        """MonsterEntry includes monster-specific stat fields."""
+        monster = MonsterEntry(
+            path="monsters/goblin",
+            name="Goblin",
+            category="monster",
+            ruleset="basic",
+            source_file="becmi_dm_rulebook.txt",
+            source_lines=(2456, 2489),
+            tags=["humanoid", "chaotic", "low-level"],
+            related=["monsters/hobgoblin", "monsters/bugbear"],
+            summary="Small chaotic humanoids, -1 to hit in daylight",
+            full_text="Goblins are small, evil humanoids...",
+            stat_block="AC6 HD1-1 Mv90'(30') Atk1wpn Dm(wpn) ML7 XP5",
+            ac=6,
+            hd="1-1",
+            move="90' (30')",
+            attacks="1 weapon",
+            damage="By weapon",
+            no_appearing="2-8 (6-60)",
+            save_as="Normal Man",
+            morale=7,
+            treasure_type="(R) C",
+            alignment="Chaotic",
+            xp=5,
+            special_abilities=["infravision 90'", "-1 to hit in daylight"],
+        )
+        assert monster.ac == 6
+        assert monster.hd == "1-1"
+        assert monster.xp == 5
+        assert "infravision" in monster.special_abilities[0]
+
+    def test_monster_entry_is_rules_entry(self):
+        """MonsterEntry is a subclass of RulesEntry."""
+        monster = MonsterEntry(
+            path="monsters/skeleton",
+            name="Skeleton",
+            category="monster",
+            ruleset="basic",
+            source_file="becmi_dm_rulebook.txt",
+            source_lines=(3000, 3030),
+            tags=["undead"],
+            related=[],
+            summary="Animated bones, mindless",
+            full_text="Skeletons are...",
+            ac=7,
+            hd="1",
+            move="60' (20')",
+            attacks="1 weapon",
+            damage="By weapon",
+            no_appearing="3-12",
+            save_as="F1",
+            morale=12,
+            treasure_type="None",
+            alignment="Chaotic",
+            xp=10,
+            special_abilities=[],
+        )
+        assert isinstance(monster, RulesEntry)
