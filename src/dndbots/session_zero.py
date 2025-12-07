@@ -324,12 +324,14 @@ class SessionZero:
                 if scenario and party_document:
                     break
 
-        # Find each player's character
+        # Find each player's character (most recent only)
+        seen_players: set[str] = set()
         for msg in reversed(transcript):
-            if msg.source.startswith("player_"):
+            if msg.source.startswith("player_") and msg.source not in seen_players:
                 char = parse_character(msg.content)
                 if char:
                     characters.append(char)
+                    seen_players.add(msg.source)
 
         # Reverse to maintain player order
         characters.reverse()
