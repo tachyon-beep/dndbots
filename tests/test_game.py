@@ -23,6 +23,79 @@ class TestAgentCreation:
         )
         assert agent.name == "dm"
 
+    def test_create_dm_agent_with_rules_tools(self):
+        """DM agent should have rules lookup tools by default."""
+        agent = create_dm_agent(
+            scenario="Test scenario",
+            model="gpt-4o-mini",
+            enable_rules_tools=True,
+        )
+        assert agent.name == "dm"
+        # Check that tools are registered
+        assert len(agent._tools) == 3
+        tool_names = [t.name for t in agent._tools]
+        assert "lookup_rules" in tool_names
+        assert "list_rules_tool" in tool_names
+        assert "search_rules_tool" in tool_names
+
+    def test_create_dm_agent_without_rules_tools(self):
+        """DM agent can be created without rules tools."""
+        agent = create_dm_agent(
+            scenario="Test scenario",
+            model="gpt-4o-mini",
+            enable_rules_tools=False,
+        )
+        assert agent.name == "dm"
+        assert len(agent._tools) == 0
+
+
+class TestRulesToolsIntegration:
+    """Test rules tools work when invoked directly."""
+
+    def test_rules_tools_can_be_invoked(self):
+        """Tools can be called directly and return expected data."""
+        from dndbots.rules_tools import create_rules_tools
+
+        lookup, list_rules, search = create_rules_tools()
+
+        # Test lookup_rules
+        result = lookup("monsters/goblin", detail="stats")
+        assert "Goblin" in result
+        assert "AC6" in result
+
+        # Test list_rules_tool
+        result = list_rules("monsters", tags="undead")
+        assert "entries" in result
+        assert "ghoul" in result.lower() or "skeleton" in result.lower()
+
+        # Test search_rules_tool
+        result = search("poison", category="monsters")
+        assert "poison" in result.lower()
+        assert "Search results" in result
+
+    def test_dm_agent_tools_are_callable(self):
+        """Tools registered with DM agent can be called."""
+        agent = create_dm_agent(
+            scenario="Test scenario",
+            model="gpt-4o-mini",
+            enable_rules_tools=True,
+        )
+
+        # Get the lookup tool and invoke it directly
+        lookup_tool = None
+        for tool in agent._tools:
+            if tool.name == "lookup_rules":
+                lookup_tool = tool
+                break
+
+        assert lookup_tool is not None
+
+        # Invoke the tool function (internal _func attribute)
+        result = lookup_tool._func(path="monsters/orc", detail="summary")
+        assert "Orc" in result or "orc" in result.lower()
+
+
+class TestPlayerAgentCreation:
     def test_create_player_agent(self):
         char = Character(
             name="Throk",

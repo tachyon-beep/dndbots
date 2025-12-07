@@ -14,27 +14,38 @@ from dndbots.models import Character
 from dndbots.prompts import build_dm_prompt, build_player_prompt
 from dndbots.output import EventBus, OutputEvent, OutputEventType
 from dndbots.output.plugins import ConsolePlugin
+from dndbots.rules_tools import create_rules_tools
 
 
 def create_dm_agent(
     scenario: str,
     model: str = "gpt-4o",
+    enable_rules_tools: bool = True,
 ) -> AssistantAgent:
     """Create the Dungeon Master agent.
 
     Args:
         scenario: The adventure scenario
         model: OpenAI model to use
+        enable_rules_tools: Enable rules lookup tools (default: True)
 
     Returns:
-        Configured DM agent
+        Configured DM agent with optional rules tools
     """
     model_client = OpenAIChatCompletionClient(model=model)
+
+    # Create rules tools if enabled
+    tools = []
+    if enable_rules_tools:
+        lookup, list_rules, search = create_rules_tools()
+        tools = [lookup, list_rules, search]
 
     return AssistantAgent(
         name="dm",
         model_client=model_client,
         system_message=build_dm_prompt(scenario),
+        tools=tools,
+        reflect_on_tool_use=True,  # Summarize tool output naturally
     )
 
 

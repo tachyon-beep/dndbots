@@ -1,6 +1,7 @@
 """Tool functions for BECMI rules access."""
 
-from typing import Literal
+from pathlib import Path
+from typing import Callable, Literal
 
 from dndbots.rules_index import (
     RulesIndex,
@@ -11,6 +12,11 @@ from dndbots.rules_index import (
     MonsterEntry,
     SpellEntry,
 )
+
+
+# Default rules directory (can be overridden)
+# Path: rules_tools.py -> dndbots/ -> src/ -> dndbots/ -> rules/
+DEFAULT_RULES_DIR = Path(__file__).parent.parent.parent / "rules"
 
 
 def get_rules(
@@ -154,3 +160,115 @@ def search_rules(
         )
         for entry, relevance, snippet in results
     ]
+
+
+def create_rules_tools(
+    rules_dir: Path | None = None,
+) -> tuple[Callable, Callable, Callable]:
+    """Create tool functions bound to a rules index.
+
+    Returns tools suitable for AutoGen AssistantAgent(tools=[...]).
+
+    Args:
+        rules_dir: Path to rules directory. Defaults to project rules/
+
+    Returns:
+        Tuple of (lookup_rules, list_rules_tool, search_rules_tool) functions
+
+    Example:
+        lookup, list_rules, search = create_rules_tools()
+        agent = AssistantAgent(name="dm", tools=[lookup, list_rules, search])
+    """
+    if rules_dir is None:
+        rules_dir = DEFAULT_RULES_DIR
+
+    index = RulesIndex(rules_dir)
+
+    def lookup_rules(
+        path: str,
+        detail: Literal["summary", "stats", "full"] = "summary",
+    ) -> str:
+        """Look up D&D rules by exact path.
+
+        Use this to get details about specific monsters, spells, items, or procedures.
+
+        Args:
+            path: Hierarchical path like "monsters/goblin", "spells/magic-user/1/sleep"
+            detail: Level of detail - "summary" (quick), "stats" (combat), "full" (everything)
+
+        Returns:
+            Rules content as formatted text, or "Not found" message
+        """
+        result = get_rules(index, path, detail)
+        if result is None:
+            return f"No rules entry found for path: {path}"
+
+        # Format output as readable text
+        lines = [f"# {result.name}", f"Category: {result.category}", ""]
+        lines.append(result.content)
+
+        if detail != "summary" and result.related:
+            lines.extend(["", "Related:", *[f"  - {r}" for r in result.related[:3]]])
+
+        return "\n".join(lines)
+
+    def list_rules_tool(
+        category: str,
+        tags: str | None = None,
+    ) -> str:
+        """List available rules entries in a category.
+
+        Use this to discover what monsters, spells, or items are available.
+
+        Args:
+            category: Category path like "monsters", "spells/cleric/1", "items"
+            tags: Comma-separated tags to filter by (e.g., "undead,dangerous")
+
+        Returns:
+            List of available entries with brief summaries
+        """
+        tag_list = [t.strip() for t in tags.split(",")] if tags else None
+        entries = list_rules(index, category, tags=tag_list)
+
+        if not entries:
+            return f"No entries found in category: {category}"
+
+        lines = [f"# {category.title()} ({len(entries)} entries)", ""]
+        for e in entries[:20]:  # Limit output
+            preview = f" [{e.stat_preview}]" if e.stat_preview else ""
+            lines.append(f"- **{e.path}**: {e.name}{preview}")
+            lines.append(f"  {e.summary[:100]}...")
+
+        if len(entries) > 20:
+            lines.append(f"\n... and {len(entries) - 20} more")
+
+        return "\n".join(lines)
+
+    def search_rules_tool(
+        query: str,
+        category: str | None = None,
+    ) -> str:
+        """Search rules by keyword.
+
+        Use this when you don't know the exact path but need to find something.
+
+        Args:
+            query: Search term like "poison", "fire", "undead"
+            category: Optional category filter like "monsters" or "spells"
+
+        Returns:
+            List of matching entries with relevance scores
+        """
+        matches = search_rules(index, query, category=category, limit=8)
+
+        if not matches:
+            return f"No matches found for: {query}"
+
+        lines = [f"# Search results for '{query}'", ""]
+        for m in matches:
+            lines.append(f"- **{m.path}** ({m.name}) - {m.relevance:.0%} match")
+            lines.append(f"  {m.snippet[:80]}...")
+
+        return "\n".join(lines)
+
+    return lookup_rules, list_rules_tool, search_rules_tool

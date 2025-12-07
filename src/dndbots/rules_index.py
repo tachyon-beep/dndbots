@@ -192,17 +192,24 @@ class RulesIndex:
                 reverse_name=data.get("reverse_name"),
             )
         else:
+            # For other categories (procedure, class, equipment, reference, item)
+            # Build full_text from available fields if not present
+            full_text = data.get("full_text", "")
+            if not full_text:
+                # Generate full_text from other fields for display
+                full_text = data.get("summary", data.get("name", ""))
+
             return RulesEntry(
                 path=data["path"],
                 name=data["name"],
                 category=data["category"],
                 ruleset=data["ruleset"],
-                source_file=data["source_file"],
-                source_lines=tuple(data["source_lines"]),
+                source_file=data.get("source_file", ""),
+                source_lines=tuple(data.get("source_lines", [0, 0])),
                 tags=data.get("tags", []),
                 related=data.get("related", []),
-                summary=data["summary"],
-                full_text=data["full_text"],
+                summary=data.get("summary", data.get("name", "")),
+                full_text=full_text,
                 min_level=data.get("min_level"),
                 max_level=data.get("max_level"),
                 stat_block=data.get("stat_block"),
