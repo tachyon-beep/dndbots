@@ -417,9 +417,15 @@ class MechanicsEngine:
             condition: Condition to add (e.g., "prone", "poisoned")
 
         Raises:
-            NotImplementedError: Not yet implemented
+            RuntimeError: If no active combat
+            ValueError: If combatant not found
         """
-        raise NotImplementedError("add_condition not yet implemented")
+        if self.combat is None:
+            raise RuntimeError("Cannot add condition: no active combat")
+        combatant = self.combat.combatants.get(target)
+        if combatant is None:
+            raise ValueError(f"Combatant {target} not found")
+        combatant.conditions.add(condition)
 
     def remove_condition(self, target: str, condition: str) -> None:
         """Remove a condition from a combatant.
@@ -429,6 +435,32 @@ class MechanicsEngine:
             condition: Condition to remove
 
         Raises:
-            NotImplementedError: Not yet implemented
+            RuntimeError: If no active combat
+            ValueError: If combatant not found
         """
-        raise NotImplementedError("remove_condition not yet implemented")
+        if self.combat is None:
+            raise RuntimeError("Cannot remove condition: no active combat")
+        combatant = self.combat.combatants.get(target)
+        if combatant is None:
+            raise ValueError(f"Combatant {target} not found")
+        combatant.conditions.discard(condition)  # discard doesn't raise if not present
+
+    def get_conditions(self, target: str) -> list[str]:
+        """Get all conditions on a combatant.
+
+        Args:
+            target: ID of combatant
+
+        Returns:
+            List of active conditions
+
+        Raises:
+            RuntimeError: If no active combat
+            ValueError: If combatant not found
+        """
+        if self.combat is None:
+            raise RuntimeError("Cannot get conditions: no active combat")
+        combatant = self.combat.combatants.get(target)
+        if combatant is None:
+            raise ValueError(f"Combatant {target} not found")
+        return list(combatant.conditions)
