@@ -223,3 +223,33 @@ class TestPhaseDetection:
         text = "pitch complete"
         result = detect_phase_marker(text)
         assert result == Phase.CONVERGE
+
+
+class TestSessionZeroSelector:
+    def test_dm_starts_first(self):
+        """DM speaks first when no messages."""
+        from unittest.mock import Mock
+        from dndbots.session_zero import session_zero_selector
+
+        result = session_zero_selector([])
+        assert result == "dm"
+
+    def test_dm_speaks_after_player(self):
+        """DM speaks after any player."""
+        from unittest.mock import Mock
+        from dndbots.session_zero import session_zero_selector
+
+        msg = Mock()
+        msg.source = "player_1"
+        result = session_zero_selector([msg])
+        assert result == "dm"
+
+    def test_model_selects_after_dm(self):
+        """Model-based selection after DM speaks."""
+        from unittest.mock import Mock
+        from dndbots.session_zero import session_zero_selector
+
+        msg = Mock()
+        msg.source = "dm"
+        result = session_zero_selector([msg])
+        assert result is None  # Let model decide

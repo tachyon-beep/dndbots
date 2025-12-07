@@ -3,7 +3,7 @@
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Sequence
 
 from autogen_agentchat.agents import AssistantAgent
 from autogen_ext.models.openai import OpenAIChatCompletionClient
@@ -278,3 +278,28 @@ class SessionZero:
                 reflect_on_tool_use=True,
             )
             self.players.append(player)
+
+
+def session_zero_selector(messages: Sequence) -> str | None:
+    """Selector for Session Zero group chat.
+
+    DM controls pacing - speaks after every player turn.
+    When DM speaks, model selects next speaker (usually a player DM addressed).
+
+    Args:
+        messages: Sequence of messages in conversation
+
+    Returns:
+        Agent name to speak next, or None for model-based selection
+    """
+    if not messages:
+        return "dm"
+
+    last_speaker = messages[-1].source
+
+    # After any player speaks, return to DM
+    if last_speaker != "dm":
+        return "dm"
+
+    # DM just spoke - let model selector pick who was addressed
+    return None
