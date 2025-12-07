@@ -290,6 +290,57 @@ class SessionZero:
             termination_condition=TextMentionTermination("SESSION ZERO LOCKED"),
         )
 
+    async def run(self) -> SessionZeroResult:
+        """Run Session Zero through all phases.
+
+        Returns:
+            SessionZeroResult with scenario, characters, and party document
+        """
+        transcript = []
+
+        # Initial prompt to kick off Session Zero
+        initial_message = (
+            "Welcome to Session Zero! Let's create our campaign together. "
+            "DM, please start by sharing your campaign concept, then we'll go around "
+            "for character pitches."
+        )
+
+        async for message in self.team.run_stream(task=initial_message):
+            if hasattr(message, "source") and hasattr(message, "content"):
+                transcript.append(message)
+
+        # Parse outputs from final messages
+        scenario = ""
+        party_document = ""
+        characters = []
+
+        # Find DM's final message for scenario and party doc
+        for msg in reversed(transcript):
+            if msg.source == "dm":
+                if not scenario:
+                    scenario = parse_scenario(msg.content)
+                if not party_document:
+                    party_document = parse_party_document(msg.content)
+                if scenario and party_document:
+                    break
+
+        # Find each player's character
+        for msg in reversed(transcript):
+            if msg.source.startswith("player_"):
+                char = parse_character(msg.content)
+                if char:
+                    characters.append(char)
+
+        # Reverse to maintain player order
+        characters.reverse()
+
+        return SessionZeroResult(
+            scenario=scenario,
+            characters=characters,
+            party_document=party_document,
+            transcript=transcript,
+        )
+
 
 def session_zero_selector(messages: Sequence) -> str | None:
     """Selector for Session Zero group chat.

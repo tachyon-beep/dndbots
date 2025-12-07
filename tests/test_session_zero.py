@@ -264,3 +264,14 @@ class TestSessionZeroSelector:
         msg.source = "dm"
         result = session_zero_selector([msg])
         assert result is None  # Let model decide
+
+
+class TestSessionZeroRun:
+    def test_session_zero_has_run_method(self):
+        """SessionZero has async run method."""
+        from dndbots.session_zero import SessionZero
+        import inspect
+
+        sz = SessionZero(num_players=2)
+        assert hasattr(sz, "run")
+        assert inspect.iscoroutinefunction(sz.run)
