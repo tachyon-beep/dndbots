@@ -685,3 +685,133 @@ class TestRollAttack:
 
         with pytest.raises(ValueError, match="Target nonexistent not found in combat"):
             engine.roll_attack("goblin_01", "nonexistent")
+
+    def test_roll_attack_modifier_affects_hit(self, monkeypatch):
+        """Modifier should affect whether attack hits."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Setup: THAC0 20, AC 10, need 10 to hit
+        # If we roll 9 without modifier: miss
+        # If we roll 9 with +2 modifier: 11 should hit
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=20,  # Need 10 to hit AC 10 (20 - 10 = 10)
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=10,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock random to always roll 9 on d20
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 9)
+
+        # Without modifier: roll 9 vs needed 10 = miss
+        result_no_mod = engine.roll_attack("goblin_01", "pc_throk", modifier=0)
+        assert result_no_mod.hit is False
+        assert result_no_mod.roll == 9
+        assert result_no_mod.needed == 10
+
+        # With +2 modifier: roll 9 + 2 = 11 vs needed 10 = hit
+        result_with_mod = engine.roll_attack("goblin_01", "pc_throk", modifier=2)
+        assert result_with_mod.hit is True
+        assert result_with_mod.roll == 11  # 9 + 2
+        assert result_with_mod.needed == 10
+        assert result_with_mod.modifier == 2
+
+    def test_roll_attack_natural_1_always_misses(self, monkeypatch):
+        """Natural 1 should always miss, even with positive modifier."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=20,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=20,  # Very high AC, but natural 1 misses anyway
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock random to always roll 1
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 1)
+
+        # Natural 1 with +10 modifier still misses
+        result = engine.roll_attack("goblin_01", "pc_throk", modifier=10)
+        assert result.hit is False
+        assert result.roll == 11  # 1 + 10, but still miss
+        assert "Critical miss" in result.narrative
+
+    def test_roll_attack_natural_20_always_hits(self, monkeypatch):
+        """Natural 20 should always hit, even with negative modifier."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=20,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=-10,  # Impossible AC, but natural 20 hits anyway
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock random to always roll 20
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 20)
+
+        # Natural 20 with -10 modifier still hits
+        result = engine.roll_attack("goblin_01", "pc_throk", modifier=-10)
+        assert result.hit is True
+        assert result.roll == 10  # 20 - 10
+        assert "Critical hit" in result.narrative

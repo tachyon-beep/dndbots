@@ -357,24 +357,33 @@ class MechanicsEngine:
         # Calculate to-hit number
         needed = attacker_thac0 - target_ac
 
-        # Roll d20 (without modifier for check_hit)
+        # Roll d20 (without modifier initially)
         raw_roll = roll(1, 20, 0)
 
-        # Check if hit (using raw roll for natural 1/20 logic)
-        hit = check_hit(raw_roll, attacker_thac0, target_ac)
+        # Natural 1 always misses (check raw roll before modifier)
+        if raw_roll == 1:
+            return AttackResult(
+                hit=False,
+                roll=raw_roll + modifier,
+                needed=needed,
+                modifier=modifier,
+                narrative="Critical miss! The attack goes wide!",
+            )
 
-        # Apply modifier to final roll
-        final_roll = raw_roll + modifier
-
-        # Generate narrative
+        # Natural 20 always hits (check raw roll before modifier)
         if raw_roll == 20:
-            narrative = "Critical hit! The strike finds its mark!"
-        elif raw_roll == 1:
-            narrative = "Critical miss! The attack goes wide!"
-        elif hit:
-            narrative = "The attack strikes true!"
-        else:
-            narrative = "The attack misses its target."
+            return AttackResult(
+                hit=True,
+                roll=raw_roll + modifier,
+                needed=needed,
+                modifier=modifier,
+                narrative="Critical hit! The strike finds its mark!",
+            )
+
+        # Normal roll: apply modifier to hit calculation
+        final_roll = raw_roll + modifier
+        hit = final_roll >= needed
+        narrative = "The attack strikes true!" if hit else "The attack misses its target."
 
         return AttackResult(
             hit=hit, roll=final_roll, needed=needed, modifier=modifier, narrative=narrative
