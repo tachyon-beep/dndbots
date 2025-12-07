@@ -211,3 +211,37 @@ class RulesIndex:
     def get(self, path: str) -> RulesEntry | None:
         """Get an entry by path."""
         return self._entries.get(path)
+
+    def list_by_category(
+        self,
+        category: str,
+        ruleset: str | None = None,
+        tags: list[str] | None = None,
+    ) -> list[RulesEntry]:
+        """List entries matching category and filters.
+
+        Args:
+            category: Category prefix like "monsters", "spells/cleric/1"
+            ruleset: Optional ruleset filter
+            tags: Optional tag filter (AND logic)
+
+        Returns:
+            List of matching entries
+        """
+        results = []
+        for path, entry in self._entries.items():
+            # Check category prefix
+            if not path.startswith(category):
+                continue
+
+            # Check ruleset filter
+            if ruleset and entry.ruleset != ruleset:
+                continue
+
+            # Check tag filter (all tags must match)
+            if tags and not all(t in entry.tags for t in tags):
+                continue
+
+            results.append(entry)
+
+        return results

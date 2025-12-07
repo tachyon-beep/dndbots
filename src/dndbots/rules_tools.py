@@ -6,6 +6,7 @@ from dndbots.rules_index import (
     RulesIndex,
     RulesEntry,
     RulesResult,
+    RulesIndexEntry,
     MonsterEntry,
     SpellEntry,
 )
@@ -90,3 +91,34 @@ def _entry_to_metadata(entry: RulesEntry) -> dict:
         })
 
     return metadata
+
+
+def list_rules(
+    index: RulesIndex,
+    category: str,
+    ruleset: str | None = None,
+    tags: list[str] | None = None,
+) -> list[RulesIndexEntry]:
+    """List available entries in a category with filtering.
+
+    Args:
+        index: The RulesIndex to query
+        category: Category path like "monsters", "spells/cleric/1"
+        ruleset: Optional ruleset filter
+        tags: Optional tag filter (AND logic)
+
+    Returns:
+        List of RulesIndexEntry with path, name, summary, tags
+    """
+    entries = index.list_by_category(category, ruleset=ruleset, tags=tags)
+
+    return [
+        RulesIndexEntry(
+            path=e.path,
+            name=e.name,
+            summary=e.summary,
+            tags=e.tags,
+            stat_preview=e.stat_block,
+        )
+        for e in entries
+    ]
