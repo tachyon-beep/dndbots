@@ -360,3 +360,88 @@ class TestDnDGamePartyDocument:
             characters=[char],
         )
         assert game.party_document is None
+
+
+class TestUpdatePartyDocumentTool:
+    def test_dm_has_update_party_document_tool(self):
+        """DM agent has update_party_document tool when party_document exists."""
+        char = Character(
+            name="Test",
+            char_class="Fighter",
+            level=1,
+            hp=8,
+            hp_max=8,
+            ac=5,
+            stats=Stats(str=14, dex=12, con=13, int=10, wis=11, cha=9),
+            equipment=[],
+            gold=0,
+        )
+        game = DnDGame(
+            scenario="Test scenario",
+            characters=[char],
+            party_document="Initial party doc",
+        )
+        # Check DM has the tool
+        tool_names = [t.name for t in game.dm._tools]
+        assert "update_party_document" in tool_names
+
+    def test_dm_no_update_tool_without_party_document(self):
+        """DM agent has no update_party_document tool when party_document is None."""
+        char = Character(
+            name="Test",
+            char_class="Fighter",
+            level=1,
+            hp=8,
+            hp_max=8,
+            ac=5,
+            stats=Stats(str=14, dex=12, con=13, int=10, wis=11, cha=9),
+            equipment=[],
+            gold=0,
+        )
+        game = DnDGame(
+            scenario="Test scenario",
+            characters=[char],
+            party_document=None,
+        )
+        # Check DM does NOT have the tool
+        tool_names = [t.name for t in game.dm._tools]
+        assert "update_party_document" not in tool_names
+
+    @pytest.mark.asyncio
+    async def test_update_party_document_modifies_document(self):
+        """update_party_document tool updates the party document."""
+        char = Character(
+            name="Test",
+            char_class="Fighter",
+            level=1,
+            hp=8,
+            hp_max=8,
+            ac=5,
+            stats=Stats(str=14, dex=12, con=13, int=10, wis=11, cha=9),
+            equipment=[],
+            gold=0,
+        )
+        game = DnDGame(
+            scenario="Test scenario",
+            characters=[char],
+            party_document="## Initial\n- Starting content",
+        )
+
+        # Find and call the tool
+        update_tool = None
+        for tool in game.dm._tools:
+            if tool.name == "update_party_document":
+                update_tool = tool
+                break
+
+        assert update_tool is not None
+
+        # Call the tool's underlying function
+        result = await update_tool._func(
+            section="## New Plot Thread",
+            content="The cult's true leader revealed"
+        )
+
+        assert "success" in result.lower()
+        assert "New Plot Thread" in game.party_document
+        assert "cult's true leader" in game.party_document

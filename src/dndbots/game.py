@@ -5,6 +5,7 @@ from typing import Sequence
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.teams import SelectorGroupChat
 from autogen_agentchat.conditions import TextMentionTermination
+from autogen_core.tools import FunctionTool
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 from dndbots.campaign import Campaign
@@ -102,6 +103,46 @@ def dm_selector(messages: Sequence) -> str | None:
     return None
 
 
+def create_update_party_document_tool(game: "DnDGame") -> FunctionTool:
+    """Create the update_party_document tool bound to a game instance.
+
+    Args:
+        game: The DnDGame instance to update
+
+    Returns:
+        FunctionTool that updates the party document
+    """
+    async def update_party_document(section: str, content: str) -> str:
+        """Update the party document with new information.
+
+        Use this tool after major events to keep the party document current:
+        - New relationships discovered between characters
+        - Plot threads resolved or introduced
+        - Notable events that change party dynamics
+        - Character development moments
+
+        Args:
+            section: Section header (e.g., "## New Plot Thread" or "## Updated Relationships")
+            content: The content to add under this section
+
+        Returns:
+            Confirmation message
+        """
+        if game.party_document is None:
+            game.party_document = ""
+
+        # Append new section
+        game.party_document += f"\n\n{section}\n{content}"
+
+        # Persist if campaign exists
+        if game.campaign:
+            await game.campaign.update_party_document(game.party_document)
+
+        return f"Party document updated successfully with new section: {section}"
+
+    return FunctionTool(update_party_document, description=update_party_document.__doc__)
+
+
 class DnDGame:
     """Orchestrates a D&D game session."""
 
@@ -142,6 +183,12 @@ class DnDGame:
 
         # Create agents
         self.dm = create_dm_agent(scenario, dm_model, party_document=party_document)
+
+        # Add update_party_document tool if party_document exists
+        if self.party_document is not None:
+            update_tool = create_update_party_document_tool(self)
+            self.dm._tools.append(update_tool)
+
         self.players = [
             create_player_agent(char, player_model, party_document=party_document)
             for char in characters
