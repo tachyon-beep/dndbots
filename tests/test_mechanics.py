@@ -550,3 +550,138 @@ class TestConditions:
 
         with pytest.raises(ValueError, match="Combatant nonexistent not found"):
             engine.get_conditions("nonexistent")
+
+
+class TestRollAttack:
+    """Tests for attack roll resolution."""
+
+    def test_roll_attack_basic_hit(self):
+        """Attack roll returns AttackResult with hit/miss."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add attacker (THAC0 19, needs 10+ to hit AC 9)
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        # Add target (AC 9)
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=9,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Roll attack (multiple times to test randomness)
+        result = engine.roll_attack("goblin_01", "pc_throk")
+
+        assert hasattr(result, "hit")
+        assert hasattr(result, "roll")
+        assert hasattr(result, "needed")
+        assert hasattr(result, "modifier")
+        assert hasattr(result, "narrative")
+        assert result.needed == 10  # THAC0 19 - AC 9 = 10
+        assert result.modifier == 0
+        assert isinstance(result.hit, bool)
+        assert isinstance(result.narrative, str)
+        assert len(result.narrative) > 0
+
+    def test_roll_attack_with_modifier(self):
+        """Attack modifier is applied to roll."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=9,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        result = engine.roll_attack("goblin_01", "pc_throk", modifier=2)
+
+        assert result.modifier == 2
+        # Roll should include modifier (roll is final d20 + modifier)
+        assert result.roll >= 3  # Min d20 (1) + modifier (2)
+        assert result.roll <= 22  # Max d20 (20) + modifier (2)
+
+    def test_roll_attack_raises_without_combat(self):
+        """RuntimeError if no active combat."""
+        engine = MechanicsEngine(debug_mode=False)
+
+        with pytest.raises(RuntimeError, match="Cannot roll attack: no active combat"):
+            engine.roll_attack("goblin_01", "pc_throk")
+
+    def test_roll_attack_raises_on_invalid_attacker(self):
+        """ValueError if attacker not found."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=9,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        with pytest.raises(ValueError, match="Attacker nonexistent not found in combat"):
+            engine.roll_attack("nonexistent", "pc_throk")
+
+    def test_roll_attack_raises_on_invalid_target(self):
+        """ValueError if target not found."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        with pytest.raises(ValueError, match="Target nonexistent not found in combat"):
+            engine.roll_attack("goblin_01", "nonexistent")

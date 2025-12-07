@@ -331,9 +331,54 @@ class MechanicsEngine:
             AttackResult with outcome
 
         Raises:
-            NotImplementedError: Not yet implemented
+            RuntimeError: If combat is not active
+            ValueError: If attacker or target not found
         """
-        raise NotImplementedError("roll_attack not yet implemented")
+        from .dice import roll
+        from .rules import check_hit
+
+        # Validate combat is active
+        if self.combat is None:
+            raise RuntimeError("Cannot roll attack: no active combat")
+
+        # Validate combatants exist
+        attacker_combatant = self.combat.combatants.get(attacker)
+        if attacker_combatant is None:
+            raise ValueError(f"Attacker {attacker} not found in combat")
+
+        target_combatant = self.combat.combatants.get(target)
+        if target_combatant is None:
+            raise ValueError(f"Target {target} not found in combat")
+
+        # Get attack parameters
+        attacker_thac0 = attacker_combatant.thac0
+        target_ac = target_combatant.ac
+
+        # Calculate to-hit number
+        needed = attacker_thac0 - target_ac
+
+        # Roll d20 (without modifier for check_hit)
+        raw_roll = roll(1, 20, 0)
+
+        # Check if hit (using raw roll for natural 1/20 logic)
+        hit = check_hit(raw_roll, attacker_thac0, target_ac)
+
+        # Apply modifier to final roll
+        final_roll = raw_roll + modifier
+
+        # Generate narrative
+        if raw_roll == 20:
+            narrative = "Critical hit! The strike finds its mark!"
+        elif raw_roll == 1:
+            narrative = "Critical miss! The attack goes wide!"
+        elif hit:
+            narrative = "The attack strikes true!"
+        else:
+            narrative = "The attack misses its target."
+
+        return AttackResult(
+            hit=hit, roll=final_roll, needed=needed, modifier=modifier, narrative=narrative
+        )
 
     def roll_damage(
         self,
