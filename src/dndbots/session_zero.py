@@ -6,6 +6,8 @@ from enum import Enum
 from typing import Any, Sequence
 
 from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.conditions import TextMentionTermination
+from autogen_agentchat.teams import SelectorGroupChat
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 from dndbots.models import Character, Stats
@@ -278,6 +280,15 @@ class SessionZero:
                 reflect_on_tool_use=True,
             )
             self.players.append(player)
+
+        # Create the group chat with DM-controlled selection
+        participants = [self.dm] + self.players
+        self.team = SelectorGroupChat(
+            participants=participants,
+            model_client=OpenAIChatCompletionClient(model=dm_model),
+            selector_func=session_zero_selector,
+            termination_condition=TextMentionTermination("SESSION ZERO LOCKED"),
+        )
 
 
 def session_zero_selector(messages: Sequence) -> str | None:

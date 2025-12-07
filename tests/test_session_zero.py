@@ -173,6 +173,17 @@ class TestSessionZeroClass:
         for player in sz.players:
             assert len(player._tools) == 3
 
+    def test_session_zero_has_team(self):
+        """SessionZero creates a SelectorGroupChat team."""
+        from dndbots.session_zero import SessionZero
+        from autogen_agentchat.teams import SelectorGroupChat
+
+        sz = SessionZero(num_players=2)
+        assert hasattr(sz, "team")
+        assert isinstance(sz.team, SelectorGroupChat)
+        # Verify participants include DM and all players
+        assert len(sz.team._participants) == 3  # DM + 2 players
+
 
 class TestPhaseDetection:
     def test_phase_enum_exists(self):
