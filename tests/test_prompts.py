@@ -1,8 +1,13 @@
 """Tests for agent prompt generation."""
 
+import json
+import tempfile
+from pathlib import Path
+
 from dndbots.prompts import build_dm_prompt, build_player_prompt
 from dndbots.models import Character, Stats
 from dndbots.memory import MemoryBuilder
+from dndbots.rules_index import RulesIndex
 
 
 class TestDMPrompt:
@@ -97,3 +102,44 @@ class TestMemoryIntegration:
         assert "LEXICON" in prompt
         # Should explain what memory block means
         assert "remember" in prompt.lower() or "memory" in prompt.lower()
+
+
+class TestDmPromptWithRulesIndex:
+    def test_dm_prompt_with_rules_index(self):
+        """DM prompt includes rules summary when index provided."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index_dir = Path(tmpdir) / "indexed" / "basic"
+            index_dir.mkdir(parents=True)
+            monsters = {
+                "orc": {
+                    "path": "monsters/orc",
+                    "name": "Orc",
+                    "category": "monster",
+                    "ruleset": "basic",
+                    "source_file": "dm.txt",
+                    "source_lines": [100, 120],
+                    "tags": ["humanoid"],
+                    "related": [],
+                    "summary": "Pig-faced humanoids",
+                    "full_text": "...",
+                    "stat_block": "AC6 HD1",
+                    "ac": 6, "hd": "1", "move": "90'", "attacks": "1",
+                    "damage": "1d6", "no_appearing": "2-8", "save_as": "F1",
+                    "morale": 8, "treasure_type": "D", "alignment": "C", "xp": 10,
+                    "special_abilities": [],
+                },
+            }
+            (index_dir / "monsters.json").write_text(json.dumps(monsters))
+
+            rules_index = RulesIndex(Path(tmpdir))
+            prompt = build_dm_prompt("Test scenario", rules_index=rules_index)
+
+            assert "Orc" in prompt
+            assert "get_rules" in prompt
+            assert "BECMI" in prompt
+
+    def test_dm_prompt_without_rules_index(self):
+        """DM prompt uses RULES_SHORTHAND when no index provided."""
+        prompt = build_dm_prompt("Test scenario")
+        # Should still have basic rules
+        assert "THAC0" in prompt or "COMBAT" in prompt
