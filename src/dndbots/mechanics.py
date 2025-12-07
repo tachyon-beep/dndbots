@@ -429,6 +429,9 @@ class MechanicsEngine:
         # Get damage dice (use provided or attacker's default)
         dice_notation = damage_dice if damage_dice is not None else attacker_combatant.damage_dice
 
+        if not dice_notation:
+            raise ValueError(f"No damage dice specified for {attacker}")
+
         # Parse dice notation
         parsed = parse_roll(dice_notation)
 

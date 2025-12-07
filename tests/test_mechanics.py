@@ -1311,3 +1311,42 @@ class TestRollDamage:
 
         with pytest.raises(ValueError, match="Target nonexistent not found in combat"):
             engine.roll_damage("goblin_01", "nonexistent")
+
+    def test_roll_damage_raises_on_empty_damage_dice(self):
+        """ValueError if damage_dice is empty or None."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add attacker with empty damage_dice
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="",  # Empty damage dice
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Should raise ValueError when trying to roll damage with empty damage_dice
+        with pytest.raises(ValueError, match="No damage dice specified for goblin_01"):
+            engine.roll_damage("goblin_01", "pc_throk")
+
+        # Also test when passing None explicitly
+        with pytest.raises(ValueError, match="No damage dice specified for goblin_01"):
+            engine.roll_damage("goblin_01", "pc_throk", damage_dice=None)
