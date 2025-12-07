@@ -815,3 +815,499 @@ class TestRollAttack:
         assert result.hit is True
         assert result.roll == 10  # 20 - 10
         assert "Critical hit" in result.narrative
+
+
+class TestRollDamage:
+    """Tests for damage roll and application."""
+
+    def test_roll_damage_basic(self, monkeypatch):
+        """Basic damage roll uses attacker's damage_dice."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Attacker with 1d6 damage
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        # Target with 10 HP
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d6 roll to 4
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 4)
+
+        result = engine.roll_damage("goblin_01", "pc_throk")
+
+        assert result.damage == 4
+        assert result.target_hp == 6  # 10 - 4
+        assert result.target_hp_max == 10
+        assert result.status == "healthy"  # 6/10 = 60% > 50%
+        assert isinstance(result.narrative, str)
+        assert len(result.narrative) > 0
+
+    def test_roll_damage_custom_damage_dice(self, monkeypatch):
+        """Can override damage_dice parameter."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",  # Default
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d8 roll to 6
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 6)
+
+        # Override with 1d8 instead of goblin's default 1d6
+        result = engine.roll_damage("goblin_01", "pc_throk", damage_dice="1d8")
+
+        assert result.damage == 6
+        assert result.target_hp == 4  # 10 - 6
+
+    def test_roll_damage_with_modifier(self, monkeypatch):
+        """Damage modifier is applied."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d6 roll to 3
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 3)
+
+        result = engine.roll_damage("goblin_01", "pc_throk", modifier=2)
+
+        assert result.damage == 5  # 3 + 2
+        assert result.target_hp == 5  # 10 - 5
+
+    def test_roll_damage_minimum_one(self, monkeypatch):
+        """Damage is minimum 1, even with negative modifier."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d6 roll to 1
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 1)
+
+        # 1 - 5 = -4, but minimum is 1
+        result = engine.roll_damage("goblin_01", "pc_throk", modifier=-5)
+
+        assert result.damage == 1
+        assert result.target_hp == 9  # 10 - 1
+
+    def test_roll_damage_status_healthy(self, monkeypatch):
+        """Status is 'healthy' when HP > 50%."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d6 roll to 1 (10 - 1 = 9, which is 90% > 50%)
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 1)
+
+        result = engine.roll_damage("goblin_01", "pc_throk")
+
+        assert result.status == "healthy"
+        assert result.target_hp == 9
+
+    def test_roll_damage_status_wounded(self, monkeypatch):
+        """Status is 'wounded' when 0 < HP <= 50%."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d6 roll to 5 (10 - 5 = 5, which is 50%)
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 5)
+
+        result = engine.roll_damage("goblin_01", "pc_throk")
+
+        assert result.status == "wounded"
+        assert result.target_hp == 5
+
+    def test_roll_damage_status_critical(self, monkeypatch):
+        """Status is 'critical' when HP = 1."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d6 roll to 6, with +3 modifier (10 - 9 = 1)
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 6)
+
+        result = engine.roll_damage("goblin_01", "pc_throk", modifier=3)
+
+        assert result.status == "critical"
+        assert result.target_hp == 1
+
+    def test_roll_damage_status_dead(self, monkeypatch):
+        """Status is 'dead' when HP <= 0."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=5,
+            hp_max=10,
+            ac=5,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d6 roll to 5 (5 - 5 = 0)
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 5)
+
+        result = engine.roll_damage("goblin_01", "pc_throk")
+
+        assert result.status == "dead"
+        assert result.target_hp == 0
+
+    def test_roll_damage_can_go_negative(self, monkeypatch):
+        """HP can go negative (for overkill damage)."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=2,
+            hp_max=10,
+            ac=5,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d6 roll to 6 (2 - 6 = -4)
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 6)
+
+        result = engine.roll_damage("goblin_01", "pc_throk")
+
+        assert result.damage == 6
+        assert result.target_hp == -4
+        assert result.status == "dead"
+
+    def test_roll_damage_modifies_combatant_hp(self, monkeypatch):
+        """Damage is actually applied to the combatant's HP."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d6 roll to 4
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 4)
+
+        # Initial HP
+        assert engine.get_combatant("pc_throk").hp == 10
+
+        # Apply damage
+        result = engine.roll_damage("goblin_01", "pc_throk")
+
+        # HP should be reduced
+        assert engine.get_combatant("pc_throk").hp == 6
+        assert result.target_hp == 6
+
+    def test_roll_damage_with_dice_notation_modifier(self, monkeypatch):
+        """Damage dice with built-in modifier (e.g., '1d8+2')."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=18,
+            damage_dice="1d8+2",  # Built-in +2
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=10,
+            hp_max=10,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        # Mock d8 roll to 5
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 5)
+
+        # Should be 5 (roll) + 2 (built-in) = 7
+        result = engine.roll_damage("pc_throk", "goblin_01")
+
+        assert result.damage == 7  # 5 + 2
+        assert result.target_hp == 3  # 10 - 7
+
+    def test_roll_damage_raises_without_combat(self):
+        """RuntimeError if no active combat."""
+        engine = MechanicsEngine(debug_mode=False)
+
+        with pytest.raises(RuntimeError, match="Cannot roll damage: no active combat"):
+            engine.roll_damage("goblin_01", "pc_throk")
+
+    def test_roll_damage_raises_on_invalid_attacker(self):
+        """ValueError if attacker not found."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        with pytest.raises(ValueError, match="Attacker nonexistent not found in combat"):
+            engine.roll_damage("nonexistent", "pc_throk")
+
+    def test_roll_damage_raises_on_invalid_target(self):
+        """ValueError if target not found."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        with pytest.raises(ValueError, match="Target nonexistent not found in combat"):
+            engine.roll_damage("goblin_01", "nonexistent")

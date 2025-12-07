@@ -408,9 +408,64 @@ class MechanicsEngine:
             DamageResult with damage dealt and target status
 
         Raises:
-            NotImplementedError: Not yet implemented
+            RuntimeError: If combat is not active
+            ValueError: If attacker or target not found
         """
-        raise NotImplementedError("roll_damage not yet implemented")
+        from .dice import roll, parse_roll
+
+        # Validate combat is active
+        if self.combat is None:
+            raise RuntimeError("Cannot roll damage: no active combat")
+
+        # Validate combatants exist
+        attacker_combatant = self.combat.combatants.get(attacker)
+        if attacker_combatant is None:
+            raise ValueError(f"Attacker {attacker} not found in combat")
+
+        target_combatant = self.combat.combatants.get(target)
+        if target_combatant is None:
+            raise ValueError(f"Target {target} not found in combat")
+
+        # Get damage dice (use provided or attacker's default)
+        dice_notation = damage_dice if damage_dice is not None else attacker_combatant.damage_dice
+
+        # Parse dice notation
+        parsed = parse_roll(dice_notation)
+
+        # Roll damage
+        base_damage = roll(parsed["dice"], parsed["sides"], parsed["modifier"])
+
+        # Apply additional modifier
+        total_damage = base_damage + modifier
+
+        # Minimum damage is 1
+        if total_damage < 1:
+            total_damage = 1
+
+        # Apply damage to target's HP
+        target_combatant.hp -= total_damage
+
+        # Determine status based on HP
+        if target_combatant.hp <= 0:
+            status = "dead"
+            narrative = f"{target_combatant.name} collapses!"
+        elif target_combatant.hp == 1:
+            status = "critical"
+            narrative = f"{target_combatant.name} is barely standing!"
+        elif target_combatant.hp > target_combatant.hp_max * 0.5:
+            status = "healthy"
+            narrative = f"A glancing blow against {target_combatant.name}!"
+        else:
+            status = "wounded"
+            narrative = f"A solid hit against {target_combatant.name}!"
+
+        return DamageResult(
+            damage=total_damage,
+            target_hp=target_combatant.hp,
+            target_hp_max=target_combatant.hp_max,
+            status=status,
+            narrative=narrative,
+        )
 
     def roll_save(
         self, target: str, save_type: str, modifier: int = 0
