@@ -1350,3 +1350,383 @@ class TestRollDamage:
         # Also test when passing None explicitly
         with pytest.raises(ValueError, match="No damage dice specified for goblin_01"):
             engine.roll_damage("goblin_01", "pc_throk", damage_dice=None)
+
+
+class TestRollSave:
+    """Tests for saving throw resolution."""
+
+    def test_roll_save_basic_success(self, monkeypatch):
+        """Successful save when roll meets target number."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add a level 1 fighter (needs 12 for death_ray saves)
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 12 (exactly what's needed)
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 12)
+
+        result = engine.roll_save("pc_throk", "death_ray")
+
+        assert result.success is True
+        assert result.roll == 12
+        assert result.needed == 12  # Level 1 Fighter death_ray save
+        assert result.modifier == 0
+        assert isinstance(result.narrative, str)
+        assert "resists" in result.narrative.lower()
+
+    def test_roll_save_basic_failure(self, monkeypatch):
+        """Failed save when roll below target number."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add a level 1 fighter (needs 12 for death_ray saves)
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 11 (one below needed)
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 11)
+
+        result = engine.roll_save("pc_throk", "death_ray")
+
+        assert result.success is False
+        assert result.roll == 11
+        assert result.needed == 12
+        assert result.modifier == 0
+        assert isinstance(result.narrative, str)
+        assert "fails" in result.narrative.lower()
+
+    def test_roll_save_natural_1_always_fails(self, monkeypatch):
+        """Natural 1 always fails, even with positive modifier."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 1
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 1)
+
+        # Even with +20 modifier, natural 1 fails
+        result = engine.roll_save("pc_throk", "death_ray", modifier=20)
+
+        assert result.success is False
+        assert result.roll == 21  # 1 + 20 modifier
+        assert result.modifier == 20
+        assert "succumbs" in result.narrative.lower()
+
+    def test_roll_save_natural_20_always_succeeds(self, monkeypatch):
+        """Natural 20 always succeeds, even with negative modifier."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 20
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 20)
+
+        # Even with -10 modifier, natural 20 succeeds
+        result = engine.roll_save("pc_throk", "death_ray", modifier=-10)
+
+        assert result.success is True
+        assert result.roll == 10  # 20 - 10 modifier
+        assert result.modifier == -10
+        assert "shrugs off" in result.narrative.lower()
+
+    def test_roll_save_modifier_affects_roll(self, monkeypatch):
+        """Modifier is applied to the roll for success calculation."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Level 1 fighter needs 12 for death_ray
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 10
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 10)
+
+        # Without modifier: 10 vs 12 = fail
+        result_no_mod = engine.roll_save("pc_throk", "death_ray", modifier=0)
+        assert result_no_mod.success is False
+        assert result_no_mod.roll == 10
+
+        # With +2 modifier: 10 + 2 = 12 vs 12 = success
+        result_with_mod = engine.roll_save("pc_throk", "death_ray", modifier=2)
+        assert result_with_mod.success is True
+        assert result_with_mod.roll == 12  # 10 + 2
+        assert result_with_mod.modifier == 2
+
+    def test_roll_save_invalid_save_type_raises_error(self):
+        """ValueError raised for invalid save_type."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        with pytest.raises(ValueError, match="Invalid save_type: invalid_type"):
+            engine.roll_save("pc_throk", "invalid_type")
+
+    def test_roll_save_invalid_target_raises_error(self):
+        """ValueError raised when target not found."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        with pytest.raises(ValueError, match="Target nonexistent not found in combat"):
+            engine.roll_save("nonexistent", "death_ray")
+
+    def test_roll_save_no_active_combat_raises_error(self):
+        """RuntimeError raised when combat is not active."""
+        engine = MechanicsEngine(debug_mode=False)
+
+        with pytest.raises(RuntimeError, match="Cannot roll save: no active combat"):
+            engine.roll_save("pc_throk", "death_ray")
+
+    def test_roll_save_all_save_types_work(self, monkeypatch):
+        """All 5 save types are valid and work correctly."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add a level 1 fighter
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to always succeed (20)
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 20)
+
+        save_types = ["death_ray", "wands", "paralysis", "breath", "spells"]
+
+        for save_type in save_types:
+            result = engine.roll_save("pc_throk", save_type)
+
+            # All should succeed with natural 20
+            assert result.success is True, f"Failed for save_type: {save_type}"
+            assert result.roll == 20
+            assert isinstance(result.needed, int)
+            assert result.needed > 0, f"Invalid target for {save_type}"
+
+    def test_roll_save_death_ray_save_type(self, monkeypatch):
+        """Death ray save type works correctly."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 12
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 12)
+
+        result = engine.roll_save("pc_throk", "death_ray")
+
+        assert result.success is True
+        assert result.needed == 12  # Level 1 Fighter death_ray
+
+    def test_roll_save_wands_save_type(self, monkeypatch):
+        """Wands save type works correctly."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 13
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 13)
+
+        result = engine.roll_save("pc_throk", "wands")
+
+        assert result.success is True
+        assert result.needed == 13  # Level 1 Fighter wands
+
+    def test_roll_save_paralysis_save_type(self, monkeypatch):
+        """Paralysis save type works correctly."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 14
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 14)
+
+        result = engine.roll_save("pc_throk", "paralysis")
+
+        assert result.success is True
+        assert result.needed == 14  # Level 1 Fighter paralysis
+
+    def test_roll_save_breath_save_type(self, monkeypatch):
+        """Breath save type works correctly."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 15
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 15)
+
+        result = engine.roll_save("pc_throk", "breath")
+
+        assert result.success is True
+        assert result.needed == 15  # Level 1 Fighter breath
+
+    def test_roll_save_spells_save_type(self, monkeypatch):
+        """Spells save type works correctly."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 16
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 16)
+
+        result = engine.roll_save("pc_throk", "spells")
+
+        assert result.success is True
+        assert result.needed == 16  # Level 1 Fighter spells
