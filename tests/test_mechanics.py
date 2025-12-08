@@ -2417,3 +2417,447 @@ class TestRollMorale:
 
         # Narrative should include the name "Grimfang"
         assert "Grimfang" in result.narrative
+
+
+class TestConditionModifiers:
+    """Tests for condition modifiers affecting attack rolls."""
+
+    def test_prone_attacker_penalty(self, monkeypatch):
+        """Prone attacker gets -4 to attack rolls."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add attacker (THAC0 20, AC 10 target, needs 10 to hit)
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=20,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=10,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 12
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 12)
+
+        # Without prone: roll 12 vs needed 10 = hit
+        result_normal = engine.roll_attack("goblin_01", "pc_throk")
+        assert result_normal.hit is True
+        assert result_normal.roll == 12
+        assert result_normal.modifier == 0
+
+        # Add prone condition
+        engine.add_condition("goblin_01", "prone")
+
+        # With prone: roll 12 - 4 = 8 vs needed 10 = miss
+        result_prone = engine.roll_attack("goblin_01", "pc_throk")
+        assert result_prone.hit is False
+        assert result_prone.roll == 8  # 12 - 4
+        assert result_prone.modifier == -4
+
+    def test_blinded_attacker_penalty(self, monkeypatch):
+        """Blinded attacker gets -4 to attack rolls."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=20,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=10,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 13
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 13)
+
+        # Add blinded condition
+        engine.add_condition("goblin_01", "blinded")
+
+        # With blinded: roll 13 - 4 = 9 vs needed 10 = miss
+        result = engine.roll_attack("goblin_01", "pc_throk")
+        assert result.hit is False
+        assert result.roll == 9  # 13 - 4
+        assert result.modifier == -4
+
+    def test_frightened_attacker_penalty(self, monkeypatch):
+        """Frightened attacker gets -2 to attack rolls."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=20,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=10,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 11
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 11)
+
+        # Add frightened condition
+        engine.add_condition("goblin_01", "frightened")
+
+        # With frightened: roll 11 - 2 = 9 vs needed 10 = miss
+        result = engine.roll_attack("goblin_01", "pc_throk")
+        assert result.hit is False
+        assert result.roll == 9  # 11 - 2
+        assert result.modifier == -2
+
+    def test_prone_target_bonus(self, monkeypatch):
+        """Prone target gives attacker +4 to hit."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=20,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=10,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 8
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 8)
+
+        # Without prone target: roll 8 vs needed 10 = miss
+        result_normal = engine.roll_attack("goblin_01", "pc_throk")
+        assert result_normal.hit is False
+        assert result_normal.roll == 8
+
+        # Add prone condition to target
+        engine.add_condition("pc_throk", "prone")
+
+        # With prone target: roll 8 + 4 = 12 vs needed 10 = hit
+        result_prone = engine.roll_attack("goblin_01", "pc_throk")
+        assert result_prone.hit is True
+        assert result_prone.roll == 12  # 8 + 4
+        assert result_prone.modifier == 4
+
+    def test_blinded_target_bonus(self, monkeypatch):
+        """Blinded target gives attacker +4 to hit."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=20,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=10,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 7
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 7)
+
+        # Add blinded condition to target
+        engine.add_condition("pc_throk", "blinded")
+
+        # With blinded target: roll 7 + 4 = 11 vs needed 10 = hit
+        result = engine.roll_attack("goblin_01", "pc_throk")
+        assert result.hit is True
+        assert result.roll == 11  # 7 + 4
+        assert result.modifier == 4
+
+    def test_paralyzed_target_auto_hit(self, monkeypatch):
+        """Paralyzed target is automatically hit."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=20,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=10,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 1 (would normally miss)
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 1)
+
+        # Add paralyzed condition to target
+        engine.add_condition("pc_throk", "paralyzed")
+
+        # Even with natural 1, paralyzed target is auto-hit
+        result = engine.roll_attack("goblin_01", "pc_throk")
+        assert result.hit is True
+        assert "paralyzed" in result.narrative.lower() or "helpless" in result.narrative.lower()
+
+    def test_multiple_conditions_stack(self, monkeypatch):
+        """Multiple conditions stack their modifiers."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=20,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=10,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 15
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 15)
+
+        # Add prone and frightened to attacker (should be -4 -2 = -6 total)
+        engine.add_condition("goblin_01", "prone")
+        engine.add_condition("goblin_01", "frightened")
+
+        # With both conditions: roll 15 - 6 = 9 vs needed 10 = miss
+        result = engine.roll_attack("goblin_01", "pc_throk")
+        assert result.hit is False
+        assert result.roll == 9  # 15 - 6
+        assert result.modifier == -6
+
+    def test_condition_modifiers_with_explicit_modifier(self, monkeypatch):
+        """Condition modifiers stack with explicit modifier parameter."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=20,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=10,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 10
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 10)
+
+        # Add prone to attacker (-4) and pass +2 explicit modifier
+        engine.add_condition("goblin_01", "prone")
+
+        # Total modifier should be -4 (condition) + 2 (explicit) = -2
+        result = engine.roll_attack("goblin_01", "pc_throk", modifier=2)
+        assert result.roll == 8  # 10 - 2
+        assert result.modifier == -2  # -4 + 2
+
+    def test_condition_modifiers_respect_natural_1(self, monkeypatch):
+        """Natural 1 always misses even with condition bonuses."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=20,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=10,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 1
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 1)
+
+        # Add prone to target (would give +4)
+        engine.add_condition("pc_throk", "prone")
+
+        # Even with +4 from prone target, natural 1 misses
+        result = engine.roll_attack("goblin_01", "pc_throk")
+        assert result.hit is False
+        assert "Critical miss" in result.narrative
+
+    def test_condition_modifiers_respect_natural_20(self, monkeypatch):
+        """Natural 20 always hits even with condition penalties."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=20,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+        )
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=10,
+            thac0=18,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=2,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 20
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 20)
+
+        # Add prone and blinded to attacker (would give -8)
+        engine.add_condition("goblin_01", "prone")
+        engine.add_condition("goblin_01", "blinded")
+
+        # Even with -8 from conditions, natural 20 hits
+        result = engine.roll_attack("goblin_01", "pc_throk")
+        assert result.hit is True
+        assert "Critical hit" in result.narrative

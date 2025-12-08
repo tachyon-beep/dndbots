@@ -355,6 +355,36 @@ class MechanicsEngine:
         if target_combatant is None:
             raise ValueError(f"Target {target} not found in combat")
 
+        # Check for paralyzed target (auto-hit)
+        if "paralyzed" in target_combatant.conditions:
+            return AttackResult(
+                hit=True,
+                roll=0,  # Roll doesn't matter for paralyzed target
+                needed=0,
+                modifier=modifier,
+                narrative=f"{target_combatant.name} is helpless! Automatic hit!",
+            )
+
+        # Calculate condition modifiers
+        condition_modifier = 0
+
+        # Attacker penalties
+        if "prone" in attacker_combatant.conditions:
+            condition_modifier -= 4
+        if "blinded" in attacker_combatant.conditions:
+            condition_modifier -= 4
+        if "frightened" in attacker_combatant.conditions:
+            condition_modifier -= 2
+
+        # Target bonuses (easier to hit)
+        if "prone" in target_combatant.conditions:
+            condition_modifier += 4
+        if "blinded" in target_combatant.conditions:
+            condition_modifier += 4
+
+        # Combine condition modifiers with explicit modifier
+        total_modifier = modifier + condition_modifier
+
         # Get attack parameters
         attacker_thac0 = attacker_combatant.thac0
         target_ac = target_combatant.ac
@@ -369,9 +399,9 @@ class MechanicsEngine:
         if raw_roll == 1:
             return AttackResult(
                 hit=False,
-                roll=raw_roll + modifier,
+                roll=raw_roll + total_modifier,
                 needed=needed,
-                modifier=modifier,
+                modifier=total_modifier,
                 narrative="Critical miss! The attack goes wide!",
             )
 
@@ -379,19 +409,19 @@ class MechanicsEngine:
         if raw_roll == 20:
             return AttackResult(
                 hit=True,
-                roll=raw_roll + modifier,
+                roll=raw_roll + total_modifier,
                 needed=needed,
-                modifier=modifier,
+                modifier=total_modifier,
                 narrative="Critical hit! The strike finds its mark!",
             )
 
         # Normal roll: apply modifier to hit calculation
-        final_roll = raw_roll + modifier
+        final_roll = raw_roll + total_modifier
         hit = final_roll >= needed
         narrative = "The attack strikes true!" if hit else "The attack misses its target."
 
         return AttackResult(
-            hit=hit, roll=final_roll, needed=needed, modifier=modifier, narrative=narrative
+            hit=hit, roll=final_roll, needed=needed, modifier=total_modifier, narrative=narrative
         )
 
     def roll_damage(
