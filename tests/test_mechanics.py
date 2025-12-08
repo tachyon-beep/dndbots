@@ -1730,3 +1730,282 @@ class TestRollSave:
 
         assert result.success is True
         assert result.needed == 16  # Level 1 Fighter spells
+
+
+class TestRollAbilityCheck:
+    """Tests for ability check resolution."""
+
+    def test_roll_ability_check_basic_success(self, monkeypatch):
+        """Successful check when roll meets difficulty."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 15 (meets difficulty 15)
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 15)
+
+        result = engine.roll_ability_check("pc_throk", "str", difficulty=15)
+
+        assert result.success is True
+        assert result.roll == 15
+        assert result.needed == 15
+        assert result.modifier == 0
+        assert isinstance(result.narrative, str)
+        assert len(result.narrative) > 0
+
+    def test_roll_ability_check_basic_failure(self, monkeypatch):
+        """Failed check when roll below difficulty."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 14 (below difficulty 15)
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 14)
+
+        result = engine.roll_ability_check("pc_throk", "dex", difficulty=15)
+
+        assert result.success is False
+        assert result.roll == 14
+        assert result.needed == 15
+        assert result.modifier == 0
+        assert isinstance(result.narrative, str)
+        assert len(result.narrative) > 0
+
+    def test_roll_ability_check_with_modifier(self, monkeypatch):
+        """Modifier is applied to the roll."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 12
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 12)
+
+        # Without modifier: 12 vs 15 = fail
+        result_no_mod = engine.roll_ability_check("pc_throk", "con", difficulty=15, modifier=0)
+        assert result_no_mod.success is False
+        assert result_no_mod.roll == 12
+
+        # With +3 modifier: 12 + 3 = 15 vs 15 = success
+        result_with_mod = engine.roll_ability_check("pc_throk", "con", difficulty=15, modifier=3)
+        assert result_with_mod.success is True
+        assert result_with_mod.roll == 15  # 12 + 3
+        assert result_with_mod.modifier == 3
+
+    def test_roll_ability_check_natural_1_always_fails(self, monkeypatch):
+        """Natural 1 always fails, even with positive modifier."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 1
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 1)
+
+        # Even with +20 modifier, natural 1 fails
+        result = engine.roll_ability_check("pc_throk", "int", difficulty=5, modifier=20)
+
+        assert result.success is False
+        assert result.roll == 21  # 1 + 20, but still fails
+        assert result.modifier == 20
+        assert "fumble" in result.narrative.lower() or "fail" in result.narrative.lower()
+
+    def test_roll_ability_check_natural_20_always_succeeds(self, monkeypatch):
+        """Natural 20 always succeeds, even with negative modifier."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 20
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 20)
+
+        # Even with -10 modifier, natural 20 succeeds
+        result = engine.roll_ability_check("pc_throk", "wis", difficulty=25, modifier=-10)
+
+        assert result.success is True
+        assert result.roll == 10  # 20 - 10
+        assert result.modifier == -10
+        # Check narrative indicates success (flexible match)
+        narrative_lower = result.narrative.lower()
+        assert "succeed" in narrative_lower or "manages" in narrative_lower or "brilliant" in narrative_lower
+
+    def test_roll_ability_check_all_abilities_valid(self, monkeypatch):
+        """All six ability scores are valid."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 15
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 15)
+
+        abilities = ["str", "dex", "con", "int", "wis", "cha"]
+
+        for ability in abilities:
+            result = engine.roll_ability_check("pc_throk", ability, difficulty=15)
+
+            assert result.success is True, f"Failed for ability: {ability}"
+            assert result.roll == 15
+            assert result.needed == 15
+            assert isinstance(result.narrative, str)
+
+    def test_roll_ability_check_invalid_ability_raises_error(self):
+        """ValueError raised for invalid ability."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        with pytest.raises(ValueError, match="Invalid ability: invalid_ability"):
+            engine.roll_ability_check("pc_throk", "invalid_ability", difficulty=15)
+
+    def test_roll_ability_check_invalid_target_raises_error(self):
+        """ValueError raised when target not found."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        with pytest.raises(ValueError, match="Target nonexistent not found in combat"):
+            engine.roll_ability_check("nonexistent", "str", difficulty=15)
+
+    def test_roll_ability_check_no_active_combat_raises_error(self):
+        """RuntimeError raised when combat is not active."""
+        engine = MechanicsEngine(debug_mode=False)
+
+        with pytest.raises(RuntimeError, match="Cannot roll ability check: no active combat"):
+            engine.roll_ability_check("pc_throk", "str", difficulty=15)
+
+    def test_roll_ability_check_modifier_affects_success(self, monkeypatch):
+        """Positive and negative modifiers affect success."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="pc_throk",
+            name="Throk",
+            hp=10,
+            hp_max=10,
+            ac=5,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=1,
+            is_pc=True,
+        )
+
+        # Mock d20 roll to 10
+        import random
+        monkeypatch.setattr(random, "randint", lambda a, b: 10)
+
+        # Base: 10 vs 15 = fail
+        result_base = engine.roll_ability_check("pc_throk", "cha", difficulty=15, modifier=0)
+        assert result_base.success is False
+        assert result_base.roll == 10
+
+        # With +5: 10 + 5 = 15 vs 15 = success
+        result_pos = engine.roll_ability_check("pc_throk", "cha", difficulty=15, modifier=5)
+        assert result_pos.success is True
+        assert result_pos.roll == 15
+
+        # With -3: 10 - 3 = 7 vs 15 = fail
+        result_neg = engine.roll_ability_check("pc_throk", "cha", difficulty=15, modifier=-3)
+        assert result_neg.success is False
+        assert result_neg.roll == 7

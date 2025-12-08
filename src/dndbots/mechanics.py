@@ -477,16 +477,81 @@ class MechanicsEngine:
 
         Args:
             target: ID of combatant making save
-            save_type: Type of save (e.g., "Death", "Wands", "Paralysis")
+            save_type: Type of save ("death_ray", "wands", "paralysis", "breath", "spells")
             modifier: Additional modifier to save roll
 
         Returns:
             SaveResult with outcome
 
         Raises:
-            NotImplementedError: Not yet implemented
+            RuntimeError: If combat is not active
+            ValueError: If target not found or save_type invalid
         """
-        raise NotImplementedError("roll_save not yet implemented")
+        from .dice import roll
+        from .rules import get_saving_throw
+
+        # Validate combat is active
+        if self.combat is None:
+            raise RuntimeError("Cannot roll save: no active combat")
+
+        # Validate combatant exists
+        target_combatant = self.combat.combatants.get(target)
+        if target_combatant is None:
+            raise ValueError(f"Target {target} not found in combat")
+
+        # Validate save_type (will raise ValueError if invalid)
+        # Valid types: "death_ray", "wands", "paralysis", "breath", "spells"
+        valid_save_types = ["death_ray", "wands", "paralysis", "breath", "spells"]
+        if save_type not in valid_save_types:
+            raise ValueError(
+                f"Invalid save_type: {save_type}. Must be one of: {', '.join(valid_save_types)}"
+            )
+
+        # Get save target number from rules
+        needed = get_saving_throw(
+            target_combatant.char_class, target_combatant.level, save_type
+        )
+
+        # Roll d20 (without modifier initially)
+        raw_roll = roll(1, 20, 0)
+
+        # Natural 1 always fails (check raw roll before modifier)
+        if raw_roll == 1:
+            return SaveResult(
+                success=False,
+                roll=raw_roll + modifier,
+                needed=needed,
+                modifier=modifier,
+                narrative=f"{target_combatant.name} succumbs to the effect!",
+            )
+
+        # Natural 20 always succeeds (check raw roll before modifier)
+        if raw_roll == 20:
+            return SaveResult(
+                success=True,
+                roll=raw_roll + modifier,
+                needed=needed,
+                modifier=modifier,
+                narrative=f"{target_combatant.name} shrugs off the effect!",
+            )
+
+        # Normal roll: apply modifier to save calculation
+        final_roll = raw_roll + modifier
+        success = final_roll >= needed
+
+        # Generate narrative based on result
+        if success:
+            narrative = f"{target_combatant.name} resists the effect!"
+        else:
+            narrative = f"{target_combatant.name} fails to resist!"
+
+        return SaveResult(
+            success=success,
+            roll=final_roll,
+            needed=needed,
+            modifier=modifier,
+            narrative=narrative,
+        )
 
     def roll_ability_check(
         self, target: str, ability: str, difficulty: int, modifier: int = 0
@@ -503,9 +568,67 @@ class MechanicsEngine:
             CheckResult with outcome
 
         Raises:
-            NotImplementedError: Not yet implemented
+            RuntimeError: If combat is not active
+            ValueError: If target not found or ability invalid
         """
-        raise NotImplementedError("roll_ability_check not yet implemented")
+        from .dice import roll
+
+        # Validate combat is active
+        if self.combat is None:
+            raise RuntimeError("Cannot roll ability check: no active combat")
+
+        # Validate combatant exists
+        target_combatant = self.combat.combatants.get(target)
+        if target_combatant is None:
+            raise ValueError(f"Target {target} not found in combat")
+
+        # Validate ability (Basic D&D six abilities)
+        valid_abilities = ["str", "dex", "con", "int", "wis", "cha"]
+        if ability not in valid_abilities:
+            raise ValueError(
+                f"Invalid ability: {ability}. Must be one of: {', '.join(valid_abilities)}"
+            )
+
+        # Roll d20 (without modifier initially)
+        raw_roll = roll(1, 20, 0)
+
+        # Natural 1 always fails (check raw roll before modifier)
+        if raw_roll == 1:
+            return CheckResult(
+                success=False,
+                roll=raw_roll + modifier,
+                needed=difficulty,
+                modifier=modifier,
+                narrative=f"{target_combatant.name} fumbles the {ability} check!",
+            )
+
+        # Natural 20 always succeeds (check raw roll before modifier)
+        if raw_roll == 20:
+            return CheckResult(
+                success=True,
+                roll=raw_roll + modifier,
+                needed=difficulty,
+                modifier=modifier,
+                narrative=f"{target_combatant.name} succeeds brilliantly at the {ability} check!",
+            )
+
+        # Normal roll: apply modifier to check calculation
+        final_roll = raw_roll + modifier
+        success = final_roll >= difficulty
+
+        # Generate narrative based on result
+        if success:
+            narrative = f"{target_combatant.name} succeeds at the {ability} check!"
+        else:
+            narrative = f"{target_combatant.name} fails the {ability} check!"
+
+        return CheckResult(
+            success=success,
+            roll=final_roll,
+            needed=difficulty,
+            modifier=modifier,
+            narrative=narrative,
+        )
 
     def roll_morale(self, target: str) -> MoraleResult:
         """Resolve a morale check (BECMI rules).
