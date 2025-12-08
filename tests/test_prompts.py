@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from dndbots.prompts import build_dm_prompt, build_player_prompt
+from dndbots.prompts import build_dm_prompt, build_player_prompt, build_referee_prompt
 from dndbots.models import Character, Stats
 from dndbots.memory import MemoryBuilder
 from dndbots.rules_index import RulesIndex
@@ -175,3 +175,80 @@ class TestPartyDocumentIntegration:
         prompt = build_player_prompt(char, party_document=party_doc)
         assert "Shared Goals" in prompt
         assert "Stop the cult" in prompt
+
+
+class TestRefereePrompt:
+    def test_referee_prompt_contains_rules(self):
+        """Referee prompt includes rules section."""
+        prompt = build_referee_prompt()
+        assert "THAC0" in prompt or "COMBAT" in prompt
+
+    def test_referee_prompt_defines_domain(self):
+        """Referee prompt clearly defines their domain."""
+        prompt = build_referee_prompt()
+        assert "YOUR DOMAIN" in prompt
+        assert "NOT YOUR DOMAIN" in prompt
+        assert "attacks" in prompt.lower() or "damage" in prompt.lower()
+
+    def test_referee_prompt_defines_when_to_speak(self):
+        """Referee prompt includes guidelines on when to speak."""
+        prompt = build_referee_prompt()
+        assert "WHEN TO SPEAK" in prompt
+        assert "WHEN TO STAY SILENT" in prompt
+
+    def test_referee_prompt_includes_style_guidance(self):
+        """Referee prompt includes style guidelines."""
+        prompt = build_referee_prompt()
+        assert "STYLE" in prompt
+        assert "briefly" in prompt.lower() or "concise" in prompt.lower()
+
+    def test_referee_prompt_includes_monster_stats_guidance(self):
+        """Referee prompt includes guidance on monster stats."""
+        prompt = build_referee_prompt()
+        assert "MONSTER STATS" in prompt
+        assert "goblins" in prompt.lower()
+
+    def test_referee_prompt_with_rules_index(self):
+        """Referee prompt includes rules summary when index provided."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            index_dir = Path(tmpdir) / "indexed" / "basic"
+            index_dir.mkdir(parents=True)
+            monsters = {
+                "orc": {
+                    "path": "monsters/orc",
+                    "name": "Orc",
+                    "category": "monster",
+                    "ruleset": "basic",
+                    "source_file": "dm.txt",
+                    "source_lines": [100, 120],
+                    "tags": ["humanoid"],
+                    "related": [],
+                    "summary": "Pig-faced humanoids",
+                    "full_text": "...",
+                    "stat_block": "AC6 HD1",
+                    "ac": 6, "hd": "1", "move": "90'", "attacks": "1",
+                    "damage": "1d6", "no_appearing": "2-8", "save_as": "F1",
+                    "morale": 8, "treasure_type": "D", "alignment": "C", "xp": 10,
+                    "special_abilities": [],
+                },
+            }
+            (index_dir / "monsters.json").write_text(json.dumps(monsters))
+
+            rules_index = RulesIndex(Path(tmpdir))
+            prompt = build_referee_prompt(rules_index=rules_index)
+
+            assert "Orc" in prompt
+            assert "get_rules" in prompt
+            assert "BECMI" in prompt
+
+    def test_referee_prompt_without_rules_index(self):
+        """Referee prompt uses RULES_SHORTHAND when no index provided."""
+        prompt = build_referee_prompt()
+        # Should still have basic rules
+        assert "THAC0" in prompt or "COMBAT" in prompt
+
+    def test_referee_prompt_emphasizes_adjudication_role(self):
+        """Referee prompt emphasizes mechanical adjudication role."""
+        prompt = build_referee_prompt()
+        assert "Rules Referee" in prompt
+        assert "mechanical" in prompt.lower() or "adjudication" in prompt.lower()
