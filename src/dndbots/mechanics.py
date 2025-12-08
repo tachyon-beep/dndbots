@@ -17,6 +17,7 @@ class Combatant:
         damage_dice: Current attack damage (e.g., "1d8+2")
         char_class: Character class for save lookups (e.g., "fighter", "goblin")
         level: Level for save lookups
+        morale: Morale score for BECMI morale checks (typically 7-12)
         conditions: Set of active conditions (e.g., {"prone", "poisoned"})
         is_pc: True for player characters, False for NPCs
     """
@@ -30,6 +31,7 @@ class Combatant:
     damage_dice: str
     char_class: str
     level: int
+    morale: int = 7
     conditions: set[str] = field(default_factory=set)
     is_pc: bool = False
 
@@ -196,6 +198,7 @@ class MechanicsEngine:
         damage_dice: str,
         char_class: str,
         level: int,
+        morale: int = 7,
         is_pc: bool = False,
     ) -> Combatant:
         """Add a combatant to the current combat.
@@ -210,6 +213,7 @@ class MechanicsEngine:
             damage_dice: Damage dice notation (e.g., "1d8+2")
             char_class: Class for save lookups (e.g., "fighter", "goblin")
             level: Level for save lookups
+            morale: Morale score for BECMI morale checks (default 7)
             is_pc: True if this is a player character
 
         Returns:
@@ -235,6 +239,7 @@ class MechanicsEngine:
             damage_dice=damage_dice,
             char_class=char_class,
             level=level,
+            morale=morale,
             is_pc=is_pc,
         )
 
@@ -640,9 +645,41 @@ class MechanicsEngine:
             MoraleResult with outcome
 
         Raises:
-            NotImplementedError: Not yet implemented
+            RuntimeError: If combat is not active
+            ValueError: If target not found
         """
-        raise NotImplementedError("roll_morale not yet implemented")
+        from .dice import roll
+
+        # Validate combat is active
+        if self.combat is None:
+            raise RuntimeError("Cannot roll morale: no active combat")
+
+        # Validate combatant exists
+        target_combatant = self.combat.combatants.get(target)
+        if target_combatant is None:
+            raise ValueError(f"Target {target} not found in combat")
+
+        # Get morale score
+        morale_score = target_combatant.morale
+
+        # Roll 2d6 (BECMI morale uses 2d6, not d20)
+        morale_roll = roll(2, 6, 0)
+
+        # Morale holds if roll <= morale score
+        holds = morale_roll <= morale_score
+
+        # Generate narrative based on result
+        if holds:
+            narrative = f"{target_combatant.name} stands firm!"
+        else:
+            narrative = f"{target_combatant.name}'s nerve breaks!"
+
+        return MoraleResult(
+            holds=holds,
+            roll=morale_roll,
+            needed=morale_score,
+            narrative=narrative,
+        )
 
     def add_condition(self, target: str, condition: str) -> None:
         """Apply a condition to a combatant.

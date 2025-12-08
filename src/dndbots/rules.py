@@ -43,6 +43,81 @@ def check_hit(roll: int, thac0: int, target_ac: int) -> bool:
     return roll >= target_number
 
 
+# Saving throw tables for Basic D&D (by class and level)
+# Format: {class: {level: {save_type: target_number}}}
+SAVING_THROWS: dict[str, dict[int, dict[str, int]]] = {
+    "Fighter": {
+        1: {"death_ray": 12, "wands": 13, "paralysis": 14, "breath": 15, "spells": 16},
+        2: {"death_ray": 12, "wands": 13, "paralysis": 14, "breath": 15, "spells": 16},
+        3: {"death_ray": 12, "wands": 13, "paralysis": 14, "breath": 15, "spells": 16},
+        4: {"death_ray": 10, "wands": 11, "paralysis": 12, "breath": 13, "spells": 14},
+        5: {"death_ray": 10, "wands": 11, "paralysis": 12, "breath": 13, "spells": 14},
+        6: {"death_ray": 10, "wands": 11, "paralysis": 12, "breath": 13, "spells": 14},
+    },
+    "Cleric": {
+        1: {"death_ray": 11, "wands": 12, "paralysis": 14, "breath": 16, "spells": 15},
+        2: {"death_ray": 11, "wands": 12, "paralysis": 14, "breath": 16, "spells": 15},
+        3: {"death_ray": 11, "wands": 12, "paralysis": 14, "breath": 16, "spells": 15},
+        4: {"death_ray": 9, "wands": 10, "paralysis": 12, "breath": 14, "spells": 13},
+        5: {"death_ray": 9, "wands": 10, "paralysis": 12, "breath": 14, "spells": 13},
+        6: {"death_ray": 9, "wands": 10, "paralysis": 12, "breath": 14, "spells": 13},
+    },
+    "Thief": {
+        1: {"death_ray": 13, "wands": 14, "paralysis": 13, "breath": 16, "spells": 15},
+        2: {"death_ray": 13, "wands": 14, "paralysis": 13, "breath": 16, "spells": 15},
+        3: {"death_ray": 13, "wands": 14, "paralysis": 13, "breath": 16, "spells": 15},
+        4: {"death_ray": 11, "wands": 12, "paralysis": 11, "breath": 14, "spells": 13},
+        5: {"death_ray": 11, "wands": 12, "paralysis": 11, "breath": 14, "spells": 13},
+        6: {"death_ray": 11, "wands": 12, "paralysis": 11, "breath": 14, "spells": 13},
+    },
+    "Magic-User": {
+        1: {"death_ray": 13, "wands": 14, "paralysis": 13, "breath": 16, "spells": 15},
+        2: {"death_ray": 13, "wands": 14, "paralysis": 13, "breath": 16, "spells": 15},
+        3: {"death_ray": 13, "wands": 14, "paralysis": 13, "breath": 16, "spells": 15},
+        4: {"death_ray": 11, "wands": 12, "paralysis": 11, "breath": 14, "spells": 13},
+        5: {"death_ray": 11, "wands": 12, "paralysis": 11, "breath": 14, "spells": 13},
+        6: {"death_ray": 11, "wands": 12, "paralysis": 11, "breath": 14, "spells": 13},
+    },
+}
+
+
+def get_saving_throw(char_class: str, level: int, save_type: str) -> int:
+    """Get saving throw target number for a character class and level.
+
+    Args:
+        char_class: Character class (e.g., "Fighter", "Cleric", "Thief", "Magic-User")
+        level: Character level (1-6 for now)
+        save_type: Type of save ("death_ray", "wands", "paralysis", "breath", "spells")
+
+    Returns:
+        Target number needed on d20 to make the save
+
+    Raises:
+        ValueError: If save_type is invalid
+    """
+    # Normalize class name (capitalize first letter)
+    normalized_class = char_class.capitalize()
+
+    # Default to Fighter if class not found
+    class_table = SAVING_THROWS.get(normalized_class, SAVING_THROWS["Fighter"])
+
+    # Clamp level to available range
+    clamped_level = min(level, max(class_table.keys()))
+    clamped_level = max(clamped_level, 1)
+
+    # Get saves for this level
+    level_saves = class_table[clamped_level]
+
+    # Validate save_type
+    if save_type not in level_saves:
+        valid_types = ", ".join(level_saves.keys())
+        raise ValueError(
+            f"Invalid save_type: {save_type}. Must be one of: {valid_types}"
+        )
+
+    return level_saves[save_type]
+
+
 # Compressed rules for system prompts
 RULES_SHORTHAND = """
 === BASIC D&D RULES (Red Box) ===

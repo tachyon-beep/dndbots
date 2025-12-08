@@ -2009,3 +2009,411 @@ class TestRollAbilityCheck:
         result_neg = engine.roll_ability_check("pc_throk", "cha", difficulty=15, modifier=-3)
         assert result_neg.success is False
         assert result_neg.roll == 7
+
+
+class TestRollMorale:
+    """Tests for morale check resolution (BECMI rules)."""
+
+    def test_roll_morale_basic_holds(self, monkeypatch):
+        """Morale holds when 2d6 roll <= morale score."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add goblin with morale 7 (default)
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+            morale=7,
+        )
+
+        # Mock 2d6 roll to 7 (3+4 = 7)
+        import random
+        rolls = iter([3, 4])  # Two die rolls that sum to 7
+        monkeypatch.setattr(random, "randint", lambda a, b: next(rolls))
+
+        result = engine.roll_morale("goblin_01")
+
+        assert result.holds is True
+        assert result.roll == 7
+        assert result.needed == 7
+        assert isinstance(result.narrative, str)
+        assert len(result.narrative) > 0
+
+    def test_roll_morale_basic_breaks(self, monkeypatch):
+        """Morale breaks when 2d6 roll > morale score."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add goblin with morale 7
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+            morale=7,
+        )
+
+        # Mock 2d6 roll to 8 (4+4 = 8, one above morale score)
+        import random
+        rolls = iter([4, 4])
+        monkeypatch.setattr(random, "randint", lambda a, b: next(rolls))
+
+        result = engine.roll_morale("goblin_01")
+
+        assert result.holds is False
+        assert result.roll == 8
+        assert result.needed == 7
+        assert isinstance(result.narrative, str)
+        assert len(result.narrative) > 0
+
+    def test_roll_morale_minimum_roll(self, monkeypatch):
+        """Minimum 2d6 roll is 2, always holds if morale >= 2."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add goblin with morale 7
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+            morale=7,
+        )
+
+        # Mock 2d6 roll to 2 (1+1 = 2, minimum possible)
+        import random
+        rolls = iter([1, 1])
+        monkeypatch.setattr(random, "randint", lambda a, b: next(rolls))
+
+        result = engine.roll_morale("goblin_01")
+
+        assert result.holds is True
+        assert result.roll == 2
+        assert result.needed == 7
+
+    def test_roll_morale_maximum_roll(self, monkeypatch):
+        """Maximum 2d6 roll is 12, always breaks if morale < 12."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add goblin with morale 7
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+            morale=7,
+        )
+
+        # Mock 2d6 roll to 12 (6+6 = 12, maximum possible)
+        import random
+        rolls = iter([6, 6])
+        monkeypatch.setattr(random, "randint", lambda a, b: next(rolls))
+
+        result = engine.roll_morale("goblin_01")
+
+        assert result.holds is False
+        assert result.roll == 12
+        assert result.needed == 7
+
+    def test_roll_morale_high_morale(self, monkeypatch):
+        """High morale (12) holds on roll of 12."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add elite unit with morale 12
+        engine.add_combatant(
+            id="veteran_01",
+            name="Veteran",
+            hp=10,
+            hp_max=10,
+            ac=4,
+            thac0=17,
+            damage_dice="1d8",
+            char_class="fighter",
+            level=3,
+            morale=12,
+        )
+
+        # Mock 2d6 roll to 12 (6+6 = 12, maximum possible)
+        import random
+        rolls = iter([6, 6])
+        monkeypatch.setattr(random, "randint", lambda a, b: next(rolls))
+
+        result = engine.roll_morale("veteran_01")
+
+        assert result.holds is True
+        assert result.roll == 12
+        assert result.needed == 12
+
+    def test_roll_morale_low_morale(self, monkeypatch):
+        """Low morale (2) breaks easily."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add cowardly creature with morale 2
+        engine.add_combatant(
+            id="coward_01",
+            name="Coward",
+            hp=3,
+            hp_max=3,
+            ac=8,
+            thac0=20,
+            damage_dice="1d4",
+            char_class="commoner",
+            level=1,
+            morale=2,
+        )
+
+        # Mock 2d6 roll to 3 (2+1 = 3)
+        import random
+        rolls = iter([2, 1])
+        monkeypatch.setattr(random, "randint", lambda a, b: next(rolls))
+
+        result = engine.roll_morale("coward_01")
+
+        assert result.holds is False
+        assert result.roll == 3
+        assert result.needed == 2
+
+    def test_roll_morale_boundary_case(self, monkeypatch):
+        """Test exact morale boundary (roll = morale)."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add combatant with morale 9
+        engine.add_combatant(
+            id="orc_01",
+            name="Orc",
+            hp=8,
+            hp_max=8,
+            ac=6,
+            thac0=19,
+            damage_dice="1d8",
+            char_class="orc",
+            level=1,
+            morale=9,
+        )
+
+        # Mock 2d6 roll to exactly 9 (5+4 = 9)
+        import random
+        rolls = iter([5, 4])
+        monkeypatch.setattr(random, "randint", lambda a, b: next(rolls))
+
+        result = engine.roll_morale("orc_01")
+
+        assert result.holds is True  # Roll <= morale = holds
+        assert result.roll == 9
+        assert result.needed == 9
+
+    def test_roll_morale_different_morale_values(self, monkeypatch):
+        """Test various morale values."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        # Add multiple combatants with different morale
+        morale_values = [7, 8, 9, 10, 11, 12]
+
+        for i, morale in enumerate(morale_values):
+            engine.add_combatant(
+                id=f"creature_{i:02d}",
+                name=f"Creature {i}",
+                hp=5,
+                hp_max=5,
+                ac=6,
+                thac0=19,
+                damage_dice="1d6",
+                char_class="monster",
+                level=1,
+                morale=morale,
+            )
+
+        # Mock 2d6 roll to 8 (4+4 = 8) for each morale check
+        import random
+        # We need 6 rolls total (2 per check, 3 checks)
+        rolls = iter([4, 4, 4, 4, 4, 4])
+        monkeypatch.setattr(random, "randint", lambda a, b: next(rolls))
+
+        # Morale 7: breaks (8 > 7)
+        result_7 = engine.roll_morale("creature_00")
+        assert result_7.holds is False
+        assert result_7.needed == 7
+
+        # Morale 8: holds (8 <= 8)
+        result_8 = engine.roll_morale("creature_01")
+        assert result_8.holds is True
+        assert result_8.needed == 8
+
+        # Morale 9+: holds (8 <= 9+)
+        result_9 = engine.roll_morale("creature_02")
+        assert result_9.holds is True
+        assert result_9.needed == 9
+
+    def test_roll_morale_uses_2d6_not_d20(self):
+        """Verify 2d6 is used (roll range 2-12), not d20."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+            morale=7,
+        )
+
+        # Roll multiple times and verify range is 2-12
+        rolls = []
+        for _ in range(50):
+            result = engine.roll_morale("goblin_01")
+            rolls.append(result.roll)
+
+        # All rolls should be in 2d6 range (2-12)
+        assert all(2 <= roll <= 12 for roll in rolls), f"Invalid roll found: {rolls}"
+
+        # Should never see values outside 2d6 range
+        assert min(rolls) >= 2
+        assert max(rolls) <= 12
+
+    def test_roll_morale_no_active_combat_raises_error(self):
+        """RuntimeError raised when combat is not active."""
+        engine = MechanicsEngine(debug_mode=False)
+
+        with pytest.raises(RuntimeError, match="Cannot roll morale: no active combat"):
+            engine.roll_morale("goblin_01")
+
+    def test_roll_morale_invalid_target_raises_error(self):
+        """ValueError raised when target not found."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+            morale=7,
+        )
+
+        with pytest.raises(ValueError, match="Target nonexistent not found in combat"):
+            engine.roll_morale("nonexistent")
+
+    def test_roll_morale_narrative_holds(self, monkeypatch):
+        """Narrative reflects morale holding."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+            morale=7,
+        )
+
+        # Mock roll to 5 (2+3 = 5, holds since 5 <= 7)
+        import random
+        rolls = iter([2, 3])
+        monkeypatch.setattr(random, "randint", lambda a, b: next(rolls))
+
+        result = engine.roll_morale("goblin_01")
+
+        assert result.holds is True
+        # Narrative should indicate holding/fighting/standing firm
+        narrative_lower = result.narrative.lower()
+        assert any(word in narrative_lower for word in ["hold", "fight", "stand", "resolute", "steady", "firm"])
+
+    def test_roll_morale_narrative_breaks(self, monkeypatch):
+        """Narrative reflects morale breaking."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Goblin",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+            morale=7,
+        )
+
+        # Mock roll to 10 (5+5 = 10, breaks since 10 > 7)
+        import random
+        rolls = iter([5, 5])
+        monkeypatch.setattr(random, "randint", lambda a, b: next(rolls))
+
+        result = engine.roll_morale("goblin_01")
+
+        assert result.holds is False
+        # Narrative should indicate breaking/fleeing/running
+        narrative_lower = result.narrative.lower()
+        assert any(word in narrative_lower for word in ["break", "flee", "run", "retreat", "panic", "rout", "nerve"])
+
+    def test_roll_morale_uses_combatant_name_in_narrative(self, monkeypatch):
+        """Narrative includes the combatant's name."""
+        engine = MechanicsEngine(debug_mode=False)
+        engine.start_combat(style="soft")
+
+        engine.add_combatant(
+            id="goblin_01",
+            name="Grimfang",
+            hp=5,
+            hp_max=5,
+            ac=6,
+            thac0=19,
+            damage_dice="1d6",
+            char_class="goblin",
+            level=1,
+            morale=7,
+        )
+
+        # Mock roll to 10 (5+5 = 10, breaks since 10 > 7)
+        import random
+        rolls = iter([5, 5])
+        monkeypatch.setattr(random, "randint", lambda a, b: next(rolls))
+
+        result = engine.roll_morale("goblin_01")
+
+        # Narrative should include the name "Grimfang"
+        assert "Grimfang" in result.narrative
