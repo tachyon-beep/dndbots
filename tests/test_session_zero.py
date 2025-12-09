@@ -49,21 +49,56 @@ class TestSessionZeroResult:
 class TestSessionZeroPrompts:
     def test_dm_prompt_includes_phase_markers(self):
         """DM prompt tells them about phase marker phrases."""
-        prompt = build_session_zero_dm_prompt()
+        prompt = build_session_zero_dm_prompt(num_players=3)
         assert "PITCH COMPLETE" in prompt
         assert "CONVERGENCE COMPLETE" in prompt
         assert "SESSION ZERO LOCKED" in prompt
 
     def test_dm_prompt_includes_output_format(self):
         """DM prompt specifies output format."""
-        prompt = build_session_zero_dm_prompt()
+        prompt = build_session_zero_dm_prompt(num_players=3)
         assert "[SCENARIO]" in prompt
         assert "[PARTY_DOCUMENT]" in prompt
 
     def test_dm_prompt_mentions_guides(self):
         """DM prompt mentions guide lookups."""
-        prompt = build_session_zero_dm_prompt()
+        prompt = build_session_zero_dm_prompt(num_players=3)
         assert "guides/interesting-campaigns" in prompt
+
+    def test_dm_prompt_includes_session_briefing(self):
+        """DM prompt includes session briefing with player count."""
+        prompt = build_session_zero_dm_prompt(num_players=3)
+        assert "SESSION BRIEFING" in prompt
+        assert "Number of Players: 3" in prompt
+        assert "player_1, player_2, player_3" in prompt
+        assert "EXACTLY 3 players" in prompt
+
+    def test_dm_prompt_with_different_player_counts(self):
+        """DM prompt adjusts for different player counts."""
+        prompt_2 = build_session_zero_dm_prompt(num_players=2)
+        assert "Number of Players: 2" in prompt_2
+        assert "player_1, player_2" in prompt_2
+        assert "EXACTLY 2 players" in prompt_2
+
+        prompt_5 = build_session_zero_dm_prompt(num_players=5)
+        assert "Number of Players: 5" in prompt_5
+        assert "player_5" in prompt_5
+
+    def test_dm_prompt_with_campaign_theme(self):
+        """DM prompt includes optional campaign theme."""
+        prompt = build_session_zero_dm_prompt(
+            num_players=3,
+            campaign_theme="Gothic horror in a haunted castle"
+        )
+        assert "Gothic horror" in prompt
+
+    def test_dm_prompt_with_session_notes(self):
+        """DM prompt includes optional session notes."""
+        prompt = build_session_zero_dm_prompt(
+            num_players=3,
+            session_notes="Focus on roleplay over combat"
+        )
+        assert "Focus on roleplay" in prompt
 
     def test_player_prompt_includes_output_format(self):
         """Player prompt specifies character output format."""

@@ -52,15 +52,50 @@ def detect_phase_marker(text: str) -> Phase | None:
     return None
 
 
-def build_session_zero_dm_prompt() -> str:
-    """Build the DM system prompt for Session Zero."""
-    return """You are the Dungeon Master for a Session Zero - collaborative campaign creation.
+def build_session_zero_dm_prompt(
+    num_players: int,
+    campaign_theme: str | None = None,
+    session_notes: str | None = None,
+) -> str:
+    """Build the DM system prompt for Session Zero.
+
+    Args:
+        num_players: Number of players in the session
+        campaign_theme: Optional theme/setting hint for the campaign
+        session_notes: Optional additional notes for the DM
+
+    Returns:
+        Complete DM system prompt for Session Zero
+    """
+    # Build player list
+    player_list = ", ".join(f"player_{i+1}" for i in range(num_players))
+
+    # Optional sections
+    theme_section = ""
+    if campaign_theme:
+        theme_section = f"\nCampaign Theme Hint: {campaign_theme}\n"
+
+    notes_section = ""
+    if session_notes:
+        notes_section = f"\nAdditional Notes: {session_notes}\n"
+
+    return f"""You are the Dungeon Master for a Session Zero - collaborative campaign creation.
+
+=== SESSION BRIEFING ===
+Number of Players: {num_players}
+Players in this session: {player_list}
+{theme_section}{notes_section}
+IMPORTANT: There are EXACTLY {num_players} players. Do NOT wait for additional players.
+Once all {num_players} players have pitched their characters, move to the Converge phase.
 
 Your job is to FACILITATE, not dominate. Guide the players to create a cohesive party.
 
 ## Phases
 
 PHASE 1 (Pitch): Share your campaign concept, then ask each player for their character pitch.
+- You have {num_players} players: {player_list}
+- After ALL {num_players} have pitched, say "PITCH COMPLETE"
+
 PHASE 2 (Converge): Help players find connections between characters and to your campaign.
 PHASE 3 (Lock): Get final mechanical details, then produce the scenario and party document.
 
@@ -75,7 +110,7 @@ Use these tools to look up rules and guides:
 ## Phase Transitions
 
 When a phase is complete, say the marker phrase EXACTLY:
-- "PITCH COMPLETE" - after all players have pitched
+- "PITCH COMPLETE" - after all {num_players} players have pitched
 - "CONVERGENCE COMPLETE" - after connections are established
 - "SESSION ZERO LOCKED" - after all details are finalized
 
@@ -91,12 +126,25 @@ After saying "SESSION ZERO LOCKED", output these blocks:
 <relationships, hooks, shared history, potential tensions>
 [/PARTY_DOCUMENT]
 
+Then ask each player to output their character in this format:
+
+[CHARACTER]
+Name: <character name>
+Class: <Fighter/Cleric/Magic-User/Thief/Elf/Dwarf/Halfling>
+Stats: STR <n>, INT <n>, WIS <n>, DEX <n>, CON <n>, CHA <n>
+HP: <number>
+AC: <number>
+Equipment: <comma-separated list>
+Background: <1-2 sentence background>
+[/CHARACTER]
+
 ## Facilitation Tips
 
 - Ask ONE player at a time for their pitch
-- Actively suggest connections: "Player 2, how might you know Player 1?"
+- Track who has pitched: once you've heard from all {num_players}, move on
+- Actively suggest connections: "player_2, how might you know player_1?"
 - Incorporate character backgrounds into your scenario
-- Keep things moving - don't let discussion stall
+- Keep things moving - don't wait for players who don't exist
 """
 
 
@@ -260,6 +308,8 @@ class SessionZero:
         num_players: int = 3,
         dm_model: str = "gpt-4o",
         player_model: str = "gpt-4o",
+        campaign_theme: str | None = None,
+        session_notes: str | None = None,
     ):
         """Initialize Session Zero with DM and player agents.
 
@@ -267,6 +317,8 @@ class SessionZero:
             num_players: Number of player agents (default: 3)
             dm_model: Model for DM agent
             player_model: Model for player agents
+            campaign_theme: Optional theme/setting hint for the campaign
+            session_notes: Optional additional notes for the DM
         """
         self.num_players = num_players
 
@@ -274,12 +326,16 @@ class SessionZero:
         lookup, list_rules, search = create_rules_tools()
         tools = [lookup, list_rules, search]
 
-        # Create DM agent
+        # Create DM agent with session briefing
         dm_client = OpenAIChatCompletionClient(model=dm_model)
         self.dm = AssistantAgent(
             name="dm",
             model_client=dm_client,
-            system_message=build_session_zero_dm_prompt(),
+            system_message=build_session_zero_dm_prompt(
+                num_players=num_players,
+                campaign_theme=campaign_theme,
+                session_notes=session_notes,
+            ),
             tools=tools,
             reflect_on_tool_use=True,
         )
