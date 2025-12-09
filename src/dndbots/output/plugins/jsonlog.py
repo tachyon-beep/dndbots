@@ -61,10 +61,19 @@ class JsonLogPlugin:
         if not self._file:
             return
 
+        # Convert content to string if it's not already
+        # (handles FunctionCall, FunctionExecutionResult, and list types)
+        content = event.content
+        if not isinstance(content, str):
+            if isinstance(content, list):
+                content = " ".join(str(item) for item in content)
+            else:
+                content = str(content)
+
         data = {
             "event_type": event.event_type.value,
             "source": event.source,
-            "content": event.content,
+            "content": content,
             "timestamp": event.timestamp.isoformat(),
             "metadata": event.metadata,
         }
