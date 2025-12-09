@@ -660,3 +660,106 @@ class Neo4jStore:
             records = await result.data()
 
         return records
+
+    # Memory query methods
+
+    async def get_character_kills(self, char_id: str) -> list[dict]:
+        """Get all kills by a character with details.
+
+        Args:
+            char_id: Character ID
+
+        Returns:
+            List of dicts with target_name, weapon, damage, narrative, session, turn
+        """
+        async with self._driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (a:Character {char_id: $char_id})-[r:KILLED]->(t:Character)
+                RETURN t.name as target_name, t.char_id as target_id,
+                       r.weapon as weapon, r.damage as damage,
+                       r.narrative as narrative, r.session as session, r.turn as turn
+                ORDER BY r.turn DESC
+                """,
+                char_id=char_id,
+            )
+            records = await result.data()
+
+        return records
+
+    async def add_witness(self, moment_id: str, char_id: str) -> None:
+        """Mark a character as witness to a moment.
+
+        Args:
+            moment_id: Moment ID
+            char_id: Character ID who witnessed
+        """
+        async with self._driver.session() as session:
+            await session.run(
+                """
+                MATCH (c:Character {char_id: $char_id})
+                MATCH (m:Moment {moment_id: $moment_id})
+                MERGE (c)-[:WITNESSED]->(m)
+                """,
+                char_id=char_id,
+                moment_id=moment_id,
+            )
+
+    async def get_witnessed_moments(
+        self,
+        char_id: str,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Get moments a character witnessed or performed.
+
+        Args:
+            char_id: Character ID
+            limit: Max results
+
+        Returns:
+            List of moment dicts
+        """
+        async with self._driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (c:Character {char_id: $char_id})-[:PERFORMED|WITNESSED]->(m:Moment)
+                RETURN DISTINCT m
+                ORDER BY m.timestamp DESC
+                LIMIT $limit
+                """,
+                char_id=char_id,
+                limit=limit,
+            )
+            records = await result.data()
+
+        return [dict(r["m"]) for r in records]
+
+    async def get_known_entities(self, char_id: str) -> list[dict]:
+        """Get all entities a character has interacted with.
+
+        Args:
+            char_id: Character ID
+
+        Returns:
+            List of dicts with entity_id, name, type (character/location/faction)
+        """
+        async with self._driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (c:Character {char_id: $char_id})-[r]->(e)
+                WHERE (e:Character OR e:Location OR e:Faction)
+                RETURN DISTINCT
+                    coalesce(e.char_id, e.location_id, e.faction_id) as entity_id,
+                    e.name as name,
+                    CASE
+                        WHEN e:Character THEN 'character'
+                        WHEN e:Location THEN 'location'
+                        WHEN e:Faction THEN 'faction'
+                    END as entity_type,
+                    type(r) as relationship
+                """,
+                char_id=char_id,
+            )
+            records = await result.data()
+
+        return records
