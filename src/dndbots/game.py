@@ -377,10 +377,15 @@ class DnDGame:
                         else:
                             event_type = EventType.PLAYER_ACTION
 
+                        # Handle content that may be a list (e.g., MultiModalMessage)
+                        content = message.content
+                        if isinstance(content, list):
+                            content = " ".join(str(c) for c in content)
+
                         event = GameEvent(
                             event_type=event_type,
                             source=message.source,
-                            content=message.content,
+                            content=content,
                             session_id=self.campaign.current_session_id or "unknown",
                         )
                         await self.campaign.record_event(event)
