@@ -8,9 +8,9 @@ from typing import Any, Sequence
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.conditions import TextMentionTermination
 from autogen_agentchat.teams import SelectorGroupChat
-from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 from dndbots.models import Character, Stats
+from dndbots.providers import Provider, create_model_client
 from dndbots.rules_tools import create_rules_tools
 
 
@@ -332,26 +332,29 @@ class SessionZero:
         campaign_theme: str | None = None,
         session_notes: str | None = None,
         verbose: bool = False,
+        provider: Provider | None = None,
     ):
         """Initialize Session Zero with DM and player agents.
 
         Args:
             num_players: Number of player agents (default: 3)
-            dm_model: Model for DM agent
-            player_model: Model for player agents
+            dm_model: Model name or alias for DM agent
+            player_model: Model name or alias for player agents
             campaign_theme: Optional theme/setting hint for the campaign
             session_notes: Optional additional notes for the DM
             verbose: Print messages to console as they arrive
+            provider: Model provider (auto-detected from env if None)
         """
         self.num_players = num_players
         self.verbose = verbose
+        self.provider = provider
 
         # Create rules tools (shared by all agents)
         lookup, list_rules, search = create_rules_tools()
         tools = [lookup, list_rules, search]
 
         # Create DM agent with session briefing
-        dm_client = OpenAIChatCompletionClient(model=dm_model)
+        dm_client = create_model_client(provider=provider, model=dm_model)
         self.dm = AssistantAgent(
             name="dm",
             model_client=dm_client,
@@ -367,7 +370,7 @@ class SessionZero:
         # Create player agents
         self.players = []
         for i in range(num_players):
-            player_client = OpenAIChatCompletionClient(model=player_model)
+            player_client = create_model_client(provider=provider, model=player_model)
             player = AssistantAgent(
                 name=f"player_{i + 1}",
                 model_client=player_client,
@@ -381,7 +384,7 @@ class SessionZero:
         participants = [self.dm] + self.players
         self.team = SelectorGroupChat(
             participants=participants,
-            model_client=OpenAIChatCompletionClient(model=dm_model),
+            model_client=create_model_client(provider=provider, model=dm_model),
             selector_func=session_zero_selector,
             termination_condition=TextMentionTermination("SESSION ZERO LOCKED"),
         )

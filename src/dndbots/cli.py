@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from dndbots.campaign import Campaign
 from dndbots.game import DnDGame
 from dndbots.models import Character, Stats
+from dndbots.providers import Provider, get_provider_from_env, list_available_models
 from dndbots.session_zero import SessionZero
 
 
@@ -48,12 +49,19 @@ def create_default_character() -> Character:
     )
 
 
-async def run_game(session_zero: bool = False, verbose: bool = False) -> None:
+async def run_game(
+    session_zero: bool = False,
+    verbose: bool = False,
+    provider: Provider | None = None,
+    model: str | None = None,
+) -> None:
     """Run the game with persistence.
 
     Args:
         session_zero: If True, run Session Zero for collaborative creation
         verbose: If True, print messages to console during Session Zero
+        provider: Model provider (auto-detected from env if None)
+        model: Model name or alias (uses provider default if None)
     """
     # Ensure data directory exists
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -88,7 +96,10 @@ async def run_game(session_zero: bool = False, verbose: bool = False) -> None:
             print("Starting Session Zero...")
             print("=" * 60 + "\n")
 
-            sz = SessionZero(num_players=3, verbose=verbose)
+            sz = SessionZero(
+                num_players=3, verbose=verbose, provider=provider,
+                dm_model=model or "gpt-4o", player_model=model or "gpt-4o",
+            )
             result = await sz.run()
 
             print("\n" + "=" * 60)
@@ -130,10 +141,11 @@ async def run_game(session_zero: bool = False, verbose: bool = False) -> None:
         game = DnDGame(
             scenario=scenario,
             characters=characters,
-            dm_model="gpt-4o",
-            player_model="gpt-4o",
+            dm_model=model or "gpt-4o",
+            player_model=model or "gpt-4o",
             campaign=campaign,
             party_document=party_document,
+            provider=provider,
         )
 
         await game.run()
@@ -178,6 +190,17 @@ def main() -> None:
         action="store_true",
         help="Print messages to console during Session Zero",
     )
+    run_parser.add_argument(
+        "--provider",
+        choices=["openai", "openrouter"],
+        default=None,
+        help="Model provider (auto-detected from env if not specified)",
+    )
+    run_parser.add_argument(
+        "--model",
+        default=None,
+        help="Model name or alias (e.g., gpt-4o, claude-3.5-sonnet)",
+    )
 
     # 'serve' command
     serve_parser = subparsers.add_parser("serve", help="Start admin UI server")
@@ -199,22 +222,42 @@ def main() -> None:
         serve(host=args.host, port=args.port)
     else:
         # Default: run the game
-        if not os.getenv("OPENAI_API_KEY"):
-            print("Error: OPENAI_API_KEY not set. Copy .env.example to .env and add your key.")
+        # Determine provider
+        provider_str = getattr(args, 'provider', None)
+        if provider_str:
+            provider = Provider(provider_str)
+        else:
+            provider = get_provider_from_env()
+
+        # Check for required API key
+        from dndbots.providers import PROVIDER_CONFIGS
+        config = PROVIDER_CONFIGS[provider]
+        if not os.getenv(config.api_key_env):
+            print(f"Error: {config.api_key_env} not set.")
+            print("Copy .env.example to .env and add your API key.")
+            if provider == Provider.OPENROUTER:
+                print("\nOpenRouter requires OPENROUTER_API_KEY from https://openrouter.ai/keys")
             return
 
         print("=" * 60)
         print("DnDBots - Basic D&D AI Campaign")
         print("=" * 60)
-        print(f"\nData directory: {DATA_DIR}")
+        print(f"\nProvider: {provider.value}")
+        print(f"Data directory: {DATA_DIR}")
         print("Type Ctrl+C to stop\n")
 
         # Get flags if present
         session_zero = getattr(args, 'session_zero', False)
         verbose = getattr(args, 'verbose', False)
+        model = getattr(args, 'model', None)
 
         try:
-            asyncio.run(run_game(session_zero=session_zero, verbose=verbose))
+            asyncio.run(run_game(
+                session_zero=session_zero,
+                verbose=verbose,
+                provider=provider,
+                model=model,
+            ))
         except KeyboardInterrupt:
             print("\n\n[System] Session interrupted by user.")
 

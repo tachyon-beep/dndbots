@@ -6,7 +6,6 @@ from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.teams import SelectorGroupChat
 from autogen_agentchat.conditions import TextMentionTermination
 from autogen_core.tools import FunctionTool
-from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 from dndbots.campaign import Campaign
 from dndbots.events import GameEvent, EventType
@@ -15,6 +14,7 @@ from dndbots.models import Character
 from dndbots.prompts import build_dm_prompt, build_player_prompt, build_referee_prompt
 from dndbots.output import EventBus, OutputEvent, OutputEventType
 from dndbots.output.plugins import ConsolePlugin
+from dndbots.providers import Provider, create_model_client
 from dndbots.rules_tools import create_rules_tools
 from dndbots.mechanics import MechanicsEngine
 from dndbots.referee_tools import create_referee_tools
@@ -28,21 +28,23 @@ def create_dm_agent(
     party_document: str | None = None,
     neo4j: "Neo4jStore | None" = None,
     campaign_id: str | None = None,
+    provider: Provider | None = None,
 ) -> AssistantAgent:
     """Create the Dungeon Master agent.
 
     Args:
         scenario: The adventure scenario
-        model: OpenAI model to use
+        model: Model name or alias to use
         enable_rules_tools: Enable rules lookup tools (default: True)
         party_document: Optional party background from Session Zero
         neo4j: Optional Neo4jStore for narrative tools
         campaign_id: Campaign ID for recording
+        provider: Model provider (auto-detected from env if None)
 
     Returns:
         Configured DM agent with optional rules and narrative tools
     """
-    model_client = OpenAIChatCompletionClient(model=model)
+    model_client = create_model_client(provider=provider, model=model)
 
     # Create rules tools if enabled
     tools = []
@@ -90,19 +92,21 @@ def create_player_agent(
     model: str = "gpt-4o",
     memory: str | None = None,
     party_document: str | None = None,
+    provider: Provider | None = None,
 ) -> AssistantAgent:
     """Create a player agent for a character.
 
     Args:
         character: The character to play
-        model: OpenAI model to use
+        model: Model name or alias to use
         memory: Optional DCML memory block
         party_document: Optional party background from Session Zero
+        provider: Model provider (auto-detected from env if None)
 
     Returns:
         Configured player agent
     """
-    model_client = OpenAIChatCompletionClient(model=model)
+    model_client = create_model_client(provider=provider, model=model)
     agent_name = sanitize_agent_name(character.name)
 
     return AssistantAgent(
@@ -118,20 +122,22 @@ def create_referee_agent(
     neo4j: "Neo4jStore | None" = None,
     campaign_id: str | None = None,
     session_id: str | None = None,
+    provider: Provider | None = None,
 ) -> AssistantAgent:
     """Create the Rules Referee agent.
 
     Args:
         engine: MechanicsEngine instance for mechanics resolution
-        model: OpenAI model to use
+        model: Model name or alias to use
         neo4j: Optional Neo4jStore for recording moments
         campaign_id: Campaign ID for recording
         session_id: Session ID for recording
+        provider: Model provider (auto-detected from env if None)
 
     Returns:
         Configured Referee agent with mechanics tools
     """
-    model_client = OpenAIChatCompletionClient(model=model)
+    model_client = create_model_client(provider=provider, model=model)
     tools = create_referee_tools(
         engine,
         neo4j=neo4j,
@@ -233,20 +239,23 @@ class DnDGame:
         event_bus: EventBus | None = None,
         party_document: str | None = None,
         enable_referee: bool = True,
+        provider: Provider | None = None,
     ):
         """Initialize a game session.
 
         Args:
             scenario: The adventure scenario
             characters: List of player characters
-            dm_model: Model for DM agent
-            player_model: Model for player agents
+            dm_model: Model name or alias for DM agent
+            player_model: Model name or alias for player agents
             campaign: Optional campaign for persistence
             enable_memory: Enable DCML memory projection (default: True)
             event_bus: Optional event bus for output (default: ConsolePlugin)
             party_document: Optional party background from Session Zero
             enable_referee: Enable Referee agent for mechanics (default: True)
+            provider: Model provider (auto-detected from env if None)
         """
+        self.provider = provider
         self.scenario = scenario
         self.characters = characters
         self.campaign = campaign
@@ -272,6 +281,7 @@ class DnDGame:
             party_document=party_document,
             neo4j=neo4j_store,
             campaign_id=campaign_id,
+            provider=self.provider,
         )
 
         # Add update_party_document tool if party_document exists
@@ -288,10 +298,13 @@ class DnDGame:
                 neo4j=neo4j_store,
                 campaign_id=campaign_id,
                 session_id=campaign.current_session_id if campaign else None,
+                provider=self.provider,
             )
 
         self.players = [
-            create_player_agent(char, player_model, party_document=party_document)
+            create_player_agent(
+                char, player_model, party_document=party_document, provider=self.provider
+            )
             for char in characters
         ]
 
@@ -304,7 +317,7 @@ class DnDGame:
         # Create the group chat with DM-controlled selection
         self.team = SelectorGroupChat(
             participants=participants,
-            model_client=OpenAIChatCompletionClient(model=dm_model),
+            model_client=create_model_client(provider=self.provider, model=dm_model),
             selector_func=dm_selector,
             termination_condition=TextMentionTermination("SESSION PAUSE"),
         )
