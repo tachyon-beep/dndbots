@@ -619,3 +619,77 @@ class TestDnDGameWithReferee:
         assert "dm" in participant_names
         assert "referee" not in participant_names
         assert "Throk" in participant_names
+
+
+class TestDnDGameRecapInjection:
+    @pytest.mark.asyncio
+    async def test_game_injects_recap_into_dm(self, monkeypatch):
+        """DnDGame injects session recap into DM prompt."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        # Mock campaign with recap
+        mock_campaign = MagicMock()
+        mock_campaign._neo4j = MagicMock()
+        mock_campaign.campaign_id = "test"
+        mock_campaign.current_session_id = "session_001"
+        mock_campaign.generate_session_recap = AsyncMock(
+            return_value="=== PREVIOUSLY ===\n- Hero killed a goblin"
+        )
+
+        char = Character(
+            name="Hero", char_class="Fighter", level=1,
+            hp=10, hp_max=10, ac=5,
+            stats=Stats(str=14, dex=12, con=13, int=10, wis=11, cha=9),
+            equipment=["sword"], gold=50,
+        )
+
+        game = DnDGame(
+            scenario="Test scenario",
+            characters=[char],
+            campaign=mock_campaign,
+            dm_model="gpt-4o-mini",
+        )
+
+        await game.initialize()
+
+        # Verify recap was injected
+        dm_message = game.dm._system_messages[0].content
+        assert "PREVIOUSLY" in dm_message
+        assert "goblin" in dm_message
+
+    @pytest.mark.asyncio
+    async def test_game_initialize_no_recap_without_history(self, monkeypatch):
+        """DnDGame initialize does not crash when no recap exists."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+
+        # Mock campaign without history
+        mock_campaign = MagicMock()
+        mock_campaign._neo4j = MagicMock()
+        mock_campaign.campaign_id = "test"
+        mock_campaign.current_session_id = "session_001"
+        mock_campaign.generate_session_recap = AsyncMock(return_value=None)
+
+        char = Character(
+            name="Hero", char_class="Fighter", level=1,
+            hp=10, hp_max=10, ac=5,
+            stats=Stats(str=14, dex=12, con=13, int=10, wis=11, cha=9),
+            equipment=["sword"], gold=50,
+        )
+
+        game = DnDGame(
+            scenario="Test scenario",
+            characters=[char],
+            campaign=mock_campaign,
+            dm_model="gpt-4o-mini",
+        )
+
+        # Should not raise
+        await game.initialize()
+
+        # DM message should not contain recap
+        dm_message = game.dm._system_messages[0].content
+        assert "PREVIOUSLY" not in dm_message

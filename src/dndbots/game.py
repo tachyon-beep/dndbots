@@ -309,6 +309,18 @@ class DnDGame:
             termination_condition=TextMentionTermination("SESSION PAUSE"),
         )
 
+    async def initialize(self) -> None:
+        """Async initialization - inject recap into DM context."""
+        if self.campaign and self.campaign._neo4j:
+            recap = await self.campaign.generate_session_recap()
+            if recap:
+                # Update DM's system message
+                from autogen_core.models import SystemMessage
+                current_message = self.dm._system_messages[0].content
+                self.dm._system_messages[0] = SystemMessage(
+                    content=f"{current_message}\n\n{recap}",
+                )
+
     async def run(self) -> None:
         """Run the game session.
 
@@ -316,6 +328,9 @@ class DnDGame:
             Phase 1 uses "SESSION PAUSE" termination condition.
             Turn counting/max_turns will be added in a future phase if needed.
         """
+        # Initialize (inject recap, etc.)
+        await self.initialize()
+
         # Start the event bus
         await self._event_bus.start()
 
