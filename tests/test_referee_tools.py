@@ -30,7 +30,7 @@ class TestToolCreation:
     def test_create_referee_tools_returns_function_tools(self, engine):
         """Test that all tools are FunctionTool instances."""
         tools = create_referee_tools(engine)
-        assert len(tools) == 12
+        assert len(tools) == 13
         for tool in tools:
             assert isinstance(tool, FunctionTool)
 
@@ -288,7 +288,7 @@ class TestConditionTools:
     def test_add_condition_tool(self, combat_with_combatants):
         """Test add_condition_tool applies condition."""
         engine, tools = combat_with_combatants
-        add_condition = tools[8]._func
+        add_condition = tools[9]._func  # add_condition_tool
 
         result = add_condition(target="pc_throk", condition="prone")
         assert "Applied 'prone'" in result
@@ -298,7 +298,7 @@ class TestConditionTools:
     def test_add_multiple_conditions(self, combat_with_combatants):
         """Test adding multiple conditions."""
         engine, tools = combat_with_combatants
-        add_condition = tools[8]._func
+        add_condition = tools[9]._func  # add_condition_tool
 
         add_condition(target="pc_throk", condition="prone")
         result = add_condition(target="pc_throk", condition="blinded")
@@ -312,8 +312,8 @@ class TestConditionTools:
     def test_remove_condition_tool(self, combat_with_combatants):
         """Test remove_condition_tool removes condition."""
         engine, tools = combat_with_combatants
-        add_condition = tools[8]._func
-        remove_condition = tools[9]._func
+        add_condition = tools[9]._func  # add_condition_tool
+        remove_condition = tools[10]._func
 
         add_condition(target="pc_throk", condition="prone")
         result = remove_condition(target="pc_throk", condition="prone")
@@ -323,7 +323,7 @@ class TestConditionTools:
     def test_remove_condition_tool_safe(self, combat_with_combatants):
         """Test remove_condition_tool is safe when condition not present."""
         engine, tools = combat_with_combatants
-        remove_condition = tools[9]._func
+        remove_condition = tools[10]._func
 
         # Should not raise error
         result = remove_condition(target="pc_throk", condition="nonexistent")
@@ -368,7 +368,7 @@ class TestStatusTools:
     def test_get_combat_status_tool(self, combat_with_combatants):
         """Test get_combat_status_tool returns combat status."""
         engine, tools = combat_with_combatants
-        get_combat_status = tools[10]._func
+        get_combat_status = tools[11]._func
 
         result = get_combat_status()
         assert "Combat Status" in result
@@ -380,7 +380,7 @@ class TestStatusTools:
 
     def test_get_combat_status_tool_no_combat(self, engine, tools):
         """Test get_combat_status_tool when no combat active."""
-        get_combat_status = tools[10]._func
+        get_combat_status = tools[11]._func
 
         result = get_combat_status()
         assert "No active combat" in result
@@ -388,8 +388,8 @@ class TestStatusTools:
     def test_get_combat_status_tool_with_conditions(self, combat_with_combatants):
         """Test get_combat_status_tool shows conditions."""
         engine, tools = combat_with_combatants
-        add_condition = tools[8]._func
-        get_combat_status = tools[10]._func
+        add_condition = tools[9]._func  # add_condition_tool
+        get_combat_status = tools[11]._func
 
         add_condition(target="pc_throk", condition="prone")
         result = get_combat_status()
@@ -398,7 +398,7 @@ class TestStatusTools:
     def test_get_combatant_tool(self, combat_with_combatants):
         """Test get_combatant_tool returns combatant details."""
         engine, tools = combat_with_combatants
-        get_combatant = tools[11]._func
+        get_combatant = tools[12]._func
 
         result = get_combatant(id="pc_throk")
         assert "Throk" in result
@@ -411,14 +411,14 @@ class TestStatusTools:
     def test_get_combatant_tool_not_found(self, combat_with_combatants):
         """Test get_combatant_tool when combatant not found."""
         engine, tools = combat_with_combatants
-        get_combatant = tools[11]._func
+        get_combatant = tools[12]._func
 
         result = get_combatant(id="nonexistent")
         assert "not found" in result
 
     def test_get_combatant_tool_no_combat(self, engine, tools):
         """Test get_combatant_tool when no combat active."""
-        get_combatant = tools[11]._func
+        get_combatant = tools[12]._func
 
         result = get_combatant(id="pc_throk")
         assert "not found" in result or "not be active" in result
@@ -479,7 +479,7 @@ class TestToolIntegration:
         """Test that conditions affect attack rolls."""
         start_combat = tools[0]._func
         add_combatant = tools[1]._func
-        add_condition = tools[8]._func
+        add_condition = tools[9]._func  # add_condition_tool
         roll_attack = tools[3]._func
 
         start_combat()
@@ -572,3 +572,65 @@ class TestToolIntegration:
         # Verify PC is in persistent storage
         assert "pc_throk" in engine.pcs
         assert engine.pcs["pc_throk"].hp == throk_hp_after_damage
+
+
+class TestRollDiceTool:
+    """Tests for the generic roll_dice_tool."""
+
+    def test_roll_dice_simple(self):
+        """Test simple dice roll."""
+        engine = MechanicsEngine(debug_mode=False)
+        tools = create_referee_tools(engine)
+        roll_dice = tools[8]._func  # roll_dice_tool is at index 8
+
+        result = roll_dice("1d6")
+        assert "Rolled 1d6" in result
+        assert "(1d6)" in result
+
+    def test_roll_dice_with_purpose(self):
+        """Test dice roll with purpose description."""
+        engine = MechanicsEngine(debug_mode=False)
+        tools = create_referee_tools(engine)
+        roll_dice = tools[8]._func  # roll_dice_tool
+
+        result = roll_dice("1d6", "Throk's initiative")
+        assert "for Throk's initiative" in result
+        assert "Rolled 1d6" in result
+
+    def test_roll_dice_multiple_dice(self):
+        """Test rolling multiple dice."""
+        engine = MechanicsEngine(debug_mode=False)
+        tools = create_referee_tools(engine)
+        roll_dice = tools[8]._func  # roll_dice_tool
+
+        result = roll_dice("2d6")
+        assert "Rolled 2d6" in result
+        assert "(2d6)" in result
+
+    def test_roll_dice_with_modifier(self):
+        """Test dice roll with modifier."""
+        engine = MechanicsEngine(debug_mode=False)
+        tools = create_referee_tools(engine)
+        roll_dice = tools[8]._func  # roll_dice_tool
+
+        result = roll_dice("1d20+5")
+        assert "Rolled 1d20+5" in result
+
+    def test_roll_dice_invalid_notation(self):
+        """Test handling of invalid dice notation."""
+        engine = MechanicsEngine(debug_mode=False)
+        tools = create_referee_tools(engine)
+        roll_dice = tools[8]._func  # roll_dice_tool
+
+        result = roll_dice("invalid")
+        assert "Invalid dice notation" in result
+
+    def test_roll_dice_d100(self):
+        """Test rolling percentile dice."""
+        engine = MechanicsEngine(debug_mode=False)
+        tools = create_referee_tools(engine)
+        roll_dice = tools[8]._func  # roll_dice_tool
+
+        result = roll_dice("1d100", "random encounter")
+        assert "Rolled 1d100" in result
+        assert "for random encounter" in result

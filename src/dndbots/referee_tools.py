@@ -333,6 +333,46 @@ def create_referee_tools(engine: MechanicsEngine) -> list[FunctionTool]:
             f"  Conditions: {conditions}"
         )
 
+    # Generic dice rolling tool
+
+    def roll_dice_tool(notation: str, purpose: str = "") -> str:
+        """Roll dice using standard notation.
+
+        Use this for any dice roll not covered by specific tools:
+        - Initiative rolls (1d6 per side in BECMI)
+        - Random encounters
+        - Treasure determination
+        - Any ad-hoc rolls
+
+        Args:
+            notation: Dice notation like "1d6", "2d6", "1d20", "3d6+2"
+            purpose: Optional description of what the roll is for
+
+        Returns:
+            Roll result with breakdown
+
+        Examples:
+            roll_dice_tool("1d6", "Throk's initiative")
+            roll_dice_tool("2d6", "Goblin morale check")
+            roll_dice_tool("1d100", "Random encounter")
+        """
+        from .dice import roll, parse_roll
+
+        try:
+            parsed = parse_roll(notation)
+            result = roll(parsed["dice"], parsed["sides"], parsed["modifier"])
+
+            purpose_text = f" for {purpose}" if purpose else ""
+            modifier_text = f" + {parsed['modifier']}" if parsed["modifier"] > 0 else ""
+            modifier_text = f" - {abs(parsed['modifier'])}" if parsed["modifier"] < 0 else modifier_text
+
+            return (
+                f"Rolled {notation}{purpose_text}: {result}\n"
+                f"({parsed['dice']}d{parsed['sides']}{modifier_text})"
+            )
+        except Exception as e:
+            return f"Invalid dice notation '{notation}': {e}"
+
     # Build and return tool list
     return [
         FunctionTool(start_combat_tool, description=start_combat_tool.__doc__),
@@ -343,6 +383,7 @@ def create_referee_tools(engine: MechanicsEngine) -> list[FunctionTool]:
         FunctionTool(roll_save_tool, description=roll_save_tool.__doc__),
         FunctionTool(roll_ability_check_tool, description=roll_ability_check_tool.__doc__),
         FunctionTool(roll_morale_tool, description=roll_morale_tool.__doc__),
+        FunctionTool(roll_dice_tool, description=roll_dice_tool.__doc__),
         FunctionTool(add_condition_tool, description=add_condition_tool.__doc__),
         FunctionTool(remove_condition_tool, description=remove_condition_tool.__doc__),
         FunctionTool(get_combat_status_tool, description=get_combat_status_tool.__doc__),

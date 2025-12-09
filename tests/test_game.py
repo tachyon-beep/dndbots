@@ -476,6 +476,7 @@ class TestRefereeAgentCreation:
             "roll_save_tool",
             "roll_ability_check_tool",
             "roll_morale_tool",
+            "roll_dice_tool",
             "add_condition_tool",
             "remove_condition_tool",
             "get_combat_status_tool",
