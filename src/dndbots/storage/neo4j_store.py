@@ -119,6 +119,41 @@ class Neo4jStore:
             )
         return location_id
 
+    # Faction nodes
+
+    async def create_faction(
+        self,
+        campaign_id: str,
+        faction_id: str,
+        name: str,
+        description: str = "",
+    ) -> str:
+        """Create or update a faction node.
+
+        Args:
+            campaign_id: Campaign identifier
+            faction_id: Faction ID
+            name: Faction name
+            description: Optional description
+
+        Returns:
+            faction_id
+        """
+        async with self._driver.session() as session:
+            await session.run(
+                """
+                MERGE (f:Faction {faction_id: $faction_id})
+                SET f.campaign_id = $campaign_id,
+                    f.name = $name,
+                    f.description = $description
+                """,
+                faction_id=faction_id,
+                campaign_id=campaign_id,
+                name=name,
+                description=description,
+            )
+        return faction_id
+
     # Relationships
 
     async def create_relationship(
@@ -417,6 +452,33 @@ class Neo4jStore:
             return None
         return dict(record["m"])
 
+    async def update_moment_narrative(
+        self,
+        moment_id: str,
+        narrative: str,
+    ) -> bool:
+        """Update a moment's narrative description.
+
+        Args:
+            moment_id: Moment ID
+            narrative: New narrative text
+
+        Returns:
+            True if updated, False if moment not found
+        """
+        async with self._driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (m:Moment {moment_id: $moment_id})
+                SET m.narrative = $narrative
+                RETURN m
+                """,
+                moment_id=moment_id,
+                narrative=narrative,
+            )
+            record = await result.single()
+        return record is not None
+
     async def get_character_moments(
         self,
         char_id: str,
@@ -447,6 +509,43 @@ class Neo4jStore:
             result = await session.run(
                 query,
                 char_id=char_id,
+                moment_type=moment_type,
+                limit=limit,
+            )
+            records = await result.data()
+
+        return [dict(r["m"]) for r in records]
+
+    async def get_campaign_moments(
+        self,
+        campaign_id: str,
+        moment_type: str | None = None,
+        limit: int = 10,
+    ) -> list[dict]:
+        """Get moments for a campaign.
+
+        Args:
+            campaign_id: Campaign ID
+            moment_type: Optional type filter
+            limit: Max results
+
+        Returns:
+            List of moment dicts
+        """
+        type_filter = "AND m.moment_type = $moment_type" if moment_type else ""
+
+        query = f"""
+            MATCH (m:Moment {{campaign_id: $campaign_id}})
+            WHERE true {type_filter}
+            RETURN m
+            ORDER BY m.timestamp DESC
+            LIMIT $limit
+        """
+
+        async with self._driver.session() as session:
+            result = await session.run(
+                query,
+                campaign_id=campaign_id,
                 moment_type=moment_type,
                 limit=limit,
             )

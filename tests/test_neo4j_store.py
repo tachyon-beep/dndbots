@@ -116,3 +116,84 @@ class TestNeo4jStore:
         location = await graph_store.get_character_location("pc_throk_001")
         assert location is not None
         assert location["name"] == "Caves of Chaos"
+
+    @pytest.mark.asyncio
+    async def test_create_faction(self, graph_store):
+        """create_faction creates faction node."""
+        faction_id = await graph_store.create_faction(
+            campaign_id="test_campaign",
+            faction_id="fac_goblins",
+            name="Darkwood Goblins",
+            description="Forest goblin tribe",
+        )
+        assert faction_id == "fac_goblins"
+
+    @pytest.mark.asyncio
+    async def test_update_moment_narrative(self, graph_store):
+        """update_moment_narrative updates existing moment."""
+        # Create a character first
+        await graph_store.create_character(
+            campaign_id="test_campaign",
+            char_id="pc_test",
+            name="Test",
+            char_class="Fighter",
+            level=1,
+        )
+        moment_id = await graph_store.record_moment(
+            campaign_id="test_campaign",
+            actor_id="pc_test",
+            moment_type="test",
+            description="Test moment",
+            session="test",
+            turn=1,
+        )
+
+        # Update narrative
+        updated = await graph_store.update_moment_narrative(
+            moment_id,
+            "Epic narrative description",
+        )
+        assert updated is True
+
+        # Verify
+        moment = await graph_store.get_moment(moment_id)
+        assert moment["narrative"] == "Epic narrative description"
+
+    @pytest.mark.asyncio
+    async def test_get_campaign_moments(self, graph_store):
+        """get_campaign_moments returns moments for campaign."""
+        # Create a character and some moments
+        await graph_store.create_character(
+            campaign_id="test_campaign",
+            char_id="pc_test",
+            name="Test",
+            char_class="Fighter",
+            level=1,
+        )
+        await graph_store.record_moment(
+            campaign_id="test_campaign",
+            actor_id="pc_test",
+            moment_type="creative",
+            description="First moment",
+            session="test",
+            turn=1,
+        )
+        await graph_store.record_moment(
+            campaign_id="test_campaign",
+            actor_id="pc_test",
+            moment_type="dramatic",
+            description="Second moment",
+            session="test",
+            turn=2,
+        )
+
+        # Get all moments
+        moments = await graph_store.get_campaign_moments("test_campaign")
+        assert len(moments) >= 2
+
+        # Get filtered moments
+        creative = await graph_store.get_campaign_moments(
+            "test_campaign", moment_type="creative"
+        )
+        assert len(creative) >= 1
+        assert all(m["moment_type"] == "creative" for m in creative)
