@@ -5,18 +5,33 @@ methods, enabling the Referee agent to manage combat state and resolve
 mechanical actions through the tool interface.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from autogen_core.tools import FunctionTool
 
-from .mechanics import MechanicsEngine
+from .mechanics import CombatTrigger, MechanicsEngine
+
+if TYPE_CHECKING:
+    from .storage.neo4j_store import Neo4jStore
 
 
-def create_referee_tools(engine: MechanicsEngine) -> list[FunctionTool]:
+def create_referee_tools(
+    engine: MechanicsEngine,
+    neo4j: Neo4jStore | None = None,
+    campaign_id: str | None = None,
+    session_id: str | None = None,
+) -> list[FunctionTool]:
     """Create tool functions bound to a MechanicsEngine instance.
 
     Returns tools suitable for AutoGen AssistantAgent(tools=[...]).
 
     Args:
         engine: The MechanicsEngine instance to operate on
+        neo4j: Optional Neo4jStore for recording moments
+        campaign_id: Campaign ID for recording
+        session_id: Session ID for recording
 
     Returns:
         List of FunctionTool instances for combat management and resolution
@@ -115,7 +130,7 @@ def create_referee_tools(engine: MechanicsEngine) -> list[FunctionTool]:
 
     # Resolution tools
 
-    def roll_attack_tool(attacker: str, target: str, modifier: int = 0) -> str:
+    async def roll_attack_tool(attacker: str, target: str, modifier: int = 0) -> str:
         """Resolve an attack roll using BECMI THAC0 rules.
 
         Rolls d20, applies modifiers, compares to target AC. Considers conditions
@@ -131,14 +146,44 @@ def create_referee_tools(engine: MechanicsEngine) -> list[FunctionTool]:
         """
         result = engine.roll_attack(attacker, target, modifier)
         hit_status = "HIT" if result.hit else "MISS"
+
+        # Check for crit triggers (use raw roll from result)
+        # Note: result.roll includes modifier, we need to detect natural 20/1
+        raw_roll = result.roll - result.modifier
+        triggers = engine.check_attack_triggers(raw_roll, attacker, target)
+
+        # Record crits to Neo4j
+        if neo4j and campaign_id and CombatTrigger.CRIT_HIT in triggers:
+            turn = engine.current_turn if hasattr(engine, "current_turn") else 0
+            await neo4j.record_moment(
+                campaign_id=campaign_id,
+                actor_id=attacker,
+                moment_type="crit_hit",
+                description=f"Natural 20 against {target}",
+                session=session_id or "unknown",
+                turn=turn,
+                target_id=target,
+            )
+
+        if neo4j and campaign_id and CombatTrigger.CRIT_FAIL in triggers:
+            turn = engine.current_turn if hasattr(engine, "current_turn") else 0
+            await neo4j.record_moment(
+                campaign_id=campaign_id,
+                actor_id=attacker,
+                moment_type="crit_fail",
+                description="Natural 1 - fumble!",
+                session=session_id or "unknown",
+                turn=turn,
+            )
+
         return (
             f"Attack roll: {result.roll} vs needed {result.needed} = {hit_status}\n"
             f"(d20 roll with modifier {result.modifier:+d})\n"
             f"{result.narrative}"
         )
 
-    def roll_damage_tool(
-        attacker: str, target: str, damage_dice: str | None = None, modifier: int = 0
+    async def roll_damage_tool(
+        attacker: str, target: str, damage_dice: str | None = None, modifier: int = 0, weapon: str = "weapon"
     ) -> str:
         """Roll damage and apply it to the target.
 
@@ -150,11 +195,26 @@ def create_referee_tools(engine: MechanicsEngine) -> list[FunctionTool]:
             target: ID of target combatant
             damage_dice: Override damage dice (uses attacker's default if None)
             modifier: Additional damage modifier (e.g., +3 for STR bonus)
+            weapon: Weapon name for kill recording (default: "weapon")
 
         Returns:
             Damage result with amount dealt, target HP, status, and narrative
         """
         result = engine.roll_damage(attacker, target, damage_dice, modifier)
+
+        # Check for kill trigger (target HP went to 0 or below)
+        if result.status == "dead" and neo4j and campaign_id:
+            turn = engine.current_turn if hasattr(engine, "current_turn") else 0
+            await neo4j.record_kill(
+                campaign_id=campaign_id,
+                attacker_id=attacker,
+                target_id=target,
+                weapon=weapon,
+                damage=result.damage,
+                session=session_id or "unknown",
+                turn=turn,
+            )
+
         return (
             f"Damage: {result.damage} points dealt\n"
             f"Target HP: {result.target_hp}/{result.target_hp_max} ({result.status})\n"

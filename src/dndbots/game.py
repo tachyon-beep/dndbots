@@ -105,18 +105,29 @@ def create_player_agent(
 def create_referee_agent(
     engine: MechanicsEngine,
     model: str = "gpt-4o",
+    neo4j: "Neo4jStore | None" = None,
+    campaign_id: str | None = None,
+    session_id: str | None = None,
 ) -> AssistantAgent:
     """Create the Rules Referee agent.
 
     Args:
         engine: MechanicsEngine instance for mechanics resolution
         model: OpenAI model to use
+        neo4j: Optional Neo4jStore for recording moments
+        campaign_id: Campaign ID for recording
+        session_id: Session ID for recording
 
     Returns:
         Configured Referee agent with mechanics tools
     """
     model_client = OpenAIChatCompletionClient(model=model)
-    tools = create_referee_tools(engine)
+    tools = create_referee_tools(
+        engine,
+        neo4j=neo4j,
+        campaign_id=campaign_id,
+        session_id=session_id,
+    )
 
     return AssistantAgent(
         name="referee",
@@ -252,7 +263,14 @@ class DnDGame:
         # Create Referee agent if enabled
         self.referee = None
         if enable_referee:
-            self.referee = create_referee_agent(self.mechanics_engine, dm_model)
+            neo4j_store = campaign._neo4j if campaign else None
+            self.referee = create_referee_agent(
+                self.mechanics_engine,
+                dm_model,
+                neo4j=neo4j_store,
+                campaign_id=campaign.campaign_id if campaign else None,
+                session_id=campaign.current_session_id if campaign else None,
+            )
 
         self.players = [
             create_player_agent(char, player_model, party_document=party_document)

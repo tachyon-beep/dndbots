@@ -162,31 +162,31 @@ class TestResolutionTools:
         )
         return engine, tools
 
-    def test_roll_attack_tool(self, combat_with_combatants):
+    async def test_roll_attack_tool(self, combat_with_combatants):
         """Test roll_attack_tool resolves attack."""
         engine, tools = combat_with_combatants
         roll_attack = tools[3]._func
 
-        result = roll_attack(attacker="pc_throk", target="goblin_01")
+        result = await roll_attack(attacker="pc_throk", target="goblin_01")
         assert "Attack roll:" in result
         assert "vs needed" in result
         assert ("HIT" in result) or ("MISS" in result)
 
-    def test_roll_attack_tool_with_modifier(self, combat_with_combatants):
+    async def test_roll_attack_tool_with_modifier(self, combat_with_combatants):
         """Test roll_attack_tool with modifier."""
         engine, tools = combat_with_combatants
         roll_attack = tools[3]._func
 
-        result = roll_attack(attacker="pc_throk", target="goblin_01", modifier=2)
+        result = await roll_attack(attacker="pc_throk", target="goblin_01", modifier=2)
         assert "Attack roll:" in result
         assert "+2" in result or "with modifier 2" in result.lower()
 
-    def test_roll_damage_tool(self, combat_with_combatants):
+    async def test_roll_damage_tool(self, combat_with_combatants):
         """Test roll_damage_tool applies damage."""
         engine, tools = combat_with_combatants
         roll_damage = tools[4]._func
 
-        result = roll_damage(attacker="pc_throk", target="goblin_01")
+        result = await roll_damage(attacker="pc_throk", target="goblin_01")
         assert "Damage:" in result
         assert "Target HP:" in result
         assert "points dealt" in result
@@ -195,12 +195,12 @@ class TestResolutionTools:
         goblin = engine.combat.combatants["goblin_01"]
         assert goblin.hp < goblin.hp_max
 
-    def test_roll_damage_tool_with_override(self, combat_with_combatants):
+    async def test_roll_damage_tool_with_override(self, combat_with_combatants):
         """Test roll_damage_tool with damage_dice override."""
         engine, tools = combat_with_combatants
         roll_damage = tools[4]._func
 
-        result = roll_damage(
+        result = await roll_damage(
             attacker="pc_throk", target="goblin_01", damage_dice="2d6+2"
         )
         assert "Damage:" in result
@@ -427,7 +427,7 @@ class TestStatusTools:
 class TestToolIntegration:
     """Test tools working together in realistic scenarios."""
 
-    def test_full_combat_flow(self, engine, tools):
+    async def test_full_combat_flow(self, engine, tools):
         """Test a complete combat flow using tools."""
         start_combat = tools[0]._func
         add_combatant = tools[1]._func
@@ -464,18 +464,18 @@ class TestToolIntegration:
         )
 
         # Attack
-        attack_result = roll_attack(attacker="pc_throk", target="goblin_01")
+        attack_result = await roll_attack(attacker="pc_throk", target="goblin_01")
         assert "Attack roll:" in attack_result
 
         # Deal damage (assuming hit, but damage always applies in this test)
-        damage_result = roll_damage(attacker="pc_throk", target="goblin_01")
+        damage_result = await roll_damage(attacker="pc_throk", target="goblin_01")
         assert "Damage:" in damage_result
 
         # End combat
         end_result = end_combat()
         assert "Combat ended" in end_result
 
-    def test_conditions_affect_combat(self, engine, tools):
+    async def test_conditions_affect_combat(self, engine, tools):
         """Test that conditions affect attack rolls."""
         start_combat = tools[0]._func
         add_combatant = tools[1]._func
@@ -511,11 +511,11 @@ class TestToolIntegration:
         add_condition(target="pc_throk", condition="prone")
 
         # Attack should reflect the penalty
-        result = roll_attack(attacker="pc_throk", target="goblin_01")
+        result = await roll_attack(attacker="pc_throk", target="goblin_01")
         # The modifier should show -4 from prone
         assert "Attack roll:" in result
 
-    def test_pc_persistence(self, engine, tools):
+    async def test_pc_persistence(self, engine, tools):
         """Test that PC HP persists across combats."""
         start_combat = tools[0]._func
         add_combatant = tools[1]._func
@@ -549,7 +549,7 @@ class TestToolIntegration:
         )
 
         # Goblin damages Throk
-        roll_damage(attacker="goblin_01", target="pc_throk")
+        await roll_damage(attacker="goblin_01", target="pc_throk")
         throk_hp_after_damage = engine.combat.combatants["pc_throk"].hp
 
         end_combat()
