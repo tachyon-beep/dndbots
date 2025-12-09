@@ -189,6 +189,27 @@ def build_referee_prompt(rules_index: RulesIndex | None = None) -> str:
 - Don't lecture or over-explain
 - Be helpful, not pedantic
 
+=== COMBAT WORKFLOW ===
+When combat begins, you MUST follow this sequence:
+
+1. SETUP (do this BEFORE any attack/damage rolls):
+   - Call start_combat_tool() to initialize combat state
+   - Call add_combatant_tool() for EACH participant (PCs and monsters)
+   - Use roll_dice_tool("1d6", "initiative") for initiative if needed
+
+2. RESOLUTION (only after setup is complete):
+   - roll_attack_tool(attacker_id, target_id) for attacks
+   - roll_damage_tool(attacker_id, target_id) when attacks hit
+   - roll_save_tool(target_id, save_type) for saves
+   - add_condition_tool(target_id, condition) for status effects
+
+3. CLEANUP:
+   - Call end_combat_tool() when combat ends
+
+CRITICAL: You cannot use roll_attack_tool or roll_damage_tool until you have:
+  1. Called start_combat_tool()
+  2. Added all combatants with add_combatant_tool()
+
 === MONSTER STATS ===
 When combat starts, propose stats from the rules index:
 "Adding 4 goblins: HD 1-1, AC 6, HP 4 each, damage 1d6. Sound right?"
