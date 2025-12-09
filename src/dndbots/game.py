@@ -421,11 +421,14 @@ class DnDGame:
         content = getattr(message, 'content', str(message))
 
         # Determine event type based on source
+        # Note: AutoGen source is the sanitized agent name (e.g., "Throk" not "Throk the Mighty")
         if source == "dm":
             event_type = OutputEventType.NARRATION
         elif source == "referee":
             event_type = OutputEventType.REFEREE
-        elif source.startswith("pc_") or any(source == c.name for c in self.characters):
+        elif source.startswith("pc_") or any(
+            source == sanitize_agent_name(c.name) for c in self.characters
+        ):
             event_type = OutputEventType.PLAYER_ACTION
         else:
             event_type = OutputEventType.SYSTEM
