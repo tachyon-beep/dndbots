@@ -48,11 +48,12 @@ def create_default_character() -> Character:
     )
 
 
-async def run_game(session_zero: bool = False) -> None:
+async def run_game(session_zero: bool = False, verbose: bool = False) -> None:
     """Run the game with persistence.
 
     Args:
         session_zero: If True, run Session Zero for collaborative creation
+        verbose: If True, print messages to console during Session Zero
     """
     # Ensure data directory exists
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -78,11 +79,16 @@ async def run_game(session_zero: bool = False) -> None:
     try:
         # Handle session zero vs. normal flow
         if session_zero:
+            # Clear existing characters for fresh Session Zero
+            cleared = await campaign.clear_characters()
+            if cleared > 0:
+                print(f"Cleared {cleared} existing character(s) for new Session Zero")
+
             print("\n" + "=" * 60)
             print("Starting Session Zero...")
             print("=" * 60 + "\n")
 
-            sz = SessionZero(num_players=3)
+            sz = SessionZero(num_players=3, verbose=verbose)
             result = await sz.run()
 
             print("\n" + "=" * 60)
@@ -167,6 +173,11 @@ def main() -> None:
         action="store_true",
         help="Run Session Zero for collaborative campaign/character creation",
     )
+    run_parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Print messages to console during Session Zero",
+    )
 
     # 'serve' command
     serve_parser = subparsers.add_parser("serve", help="Start admin UI server")
@@ -198,11 +209,12 @@ def main() -> None:
         print(f"\nData directory: {DATA_DIR}")
         print("Type Ctrl+C to stop\n")
 
-        # Get session_zero flag if present
+        # Get flags if present
         session_zero = getattr(args, 'session_zero', False)
+        verbose = getattr(args, 'verbose', False)
 
         try:
-            asyncio.run(run_game(session_zero=session_zero))
+            asyncio.run(run_game(session_zero=session_zero, verbose=verbose))
         except KeyboardInterrupt:
             print("\n\n[System] Session interrupted by user.")
 

@@ -270,3 +270,22 @@ class SQLiteStore:
             (char.name, json.dumps(char_data), char_id),
         )
         await self._conn.commit()
+
+    async def clear_campaign_characters(self, campaign_id: str) -> int:
+        """Delete all characters for a campaign.
+
+        Args:
+            campaign_id: The campaign to clear characters from
+
+        Returns:
+            Number of characters deleted
+        """
+        if not self._conn:
+            raise RuntimeError("Store not initialized")
+
+        cursor = await self._conn.execute(
+            "DELETE FROM characters WHERE campaign_id = ?",
+            (campaign_id,),
+        )
+        await self._conn.commit()
+        return cursor.rowcount

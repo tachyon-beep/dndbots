@@ -81,6 +81,15 @@ def build_session_zero_dm_prompt(
 
     return f"""You are the Dungeon Master for a Session Zero - collaborative campaign creation.
 
+=== SYSTEM: Basic D&D (1983 Red Box / BECMI) ===
+This is NOT modern D&D 5e. Basic D&D has different rules:
+- Only 7 classes: Fighter, Cleric, Magic-User, Thief, Elf, Dwarf, Halfling
+- Race-as-class (Elf, Dwarf, Halfling are classes, not races)
+- No skills system - use ability checks and player creativity
+- Descending AC (lower is better, AC 9 is unarmored, AC 2 is plate+shield)
+- THAC0 combat system
+- Deadly and lethal - 1st level characters are fragile
+
 === SESSION BRIEFING ===
 Number of Players: {num_players}
 Players in this session: {player_list}
@@ -159,13 +168,25 @@ def build_session_zero_player_prompt(player_number: int) -> str:
     """
     return f"""You are Player {player_number} in a Session Zero - collaborative character creation.
 
+This is Basic D&D (1983 Red Box / BECMI). There are only 7 classes:
+- Fighter - martial combat specialist
+- Cleric - divine healer and undead turner
+- Magic-User - arcane spellcaster (wizards)
+- Thief - stealth, locks, traps, backstab
+- Elf - fighter/magic-user hybrid (race-as-class)
+- Dwarf - tough warrior with stonework skills (race-as-class)
+- Halfling - nimble fighter with AC bonus (race-as-class)
+
+There are NO Bards, Rangers, Paladins, Druids, Monks, Warlocks, or other modern D&D classes.
+Design your concept around what these 7 classes can do.
+
 Follow the DM's lead through each phase.
 
 ## Your Tasks
 
 When the DM asks for your pitch:
 - Look up the character guide: lookup_rules("guides/interesting-characters", detail="full")
-- Propose an interesting character concept with personality, goals, and flaws
+- Propose an interesting character concept using one of the 7 Basic D&D classes
 - Keep it brief - 2-3 paragraphs max
 
 When the DM asks about connections:
@@ -310,6 +331,7 @@ class SessionZero:
         player_model: str = "gpt-4o",
         campaign_theme: str | None = None,
         session_notes: str | None = None,
+        verbose: bool = False,
     ):
         """Initialize Session Zero with DM and player agents.
 
@@ -319,8 +341,10 @@ class SessionZero:
             player_model: Model for player agents
             campaign_theme: Optional theme/setting hint for the campaign
             session_notes: Optional additional notes for the DM
+            verbose: Print messages to console as they arrive
         """
         self.num_players = num_players
+        self.verbose = verbose
 
         # Create rules tools (shared by all agents)
         lookup, list_rules, search = create_rules_tools()
@@ -380,6 +404,12 @@ class SessionZero:
         async for message in self.team.run_stream(task=initial_message):
             if hasattr(message, "source") and hasattr(message, "content"):
                 transcript.append(message)
+                if self.verbose:
+                    content = get_content_as_string(message)
+                    # Truncate very long messages for readability
+                    if len(content) > 500:
+                        content = content[:500] + "..."
+                    print(f"[{message.source}] {content}")
 
         # Parse outputs from final messages
         scenario = ""

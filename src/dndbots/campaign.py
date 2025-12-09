@@ -120,6 +120,18 @@ class Campaign:
             raise RuntimeError("Campaign not initialized")
         await self._sqlite.update_character(char_id, char)
 
+    async def clear_characters(self) -> int:
+        """Remove all characters from the campaign.
+
+        Useful for resetting before Session Zero.
+
+        Returns:
+            Number of characters removed
+        """
+        if not self._sqlite:
+            raise RuntimeError("Campaign not initialized")
+        return await self._sqlite.clear_campaign_characters(self.campaign_id)
+
     # Event management
 
     async def record_event(self, event: GameEvent) -> str:

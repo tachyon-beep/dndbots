@@ -246,26 +246,53 @@ def create_referee_tools(
     def roll_ability_check_tool(
         target: str, ability: str, difficulty: int, modifier: int = 0
     ) -> str:
-        """Resolve an ability check.
+        """Resolve an ability check (works in or out of combat).
 
         Rolls d20 vs difficulty target. Natural 1 always fails, natural 20
         always succeeds. Used for STR/DEX/CON/INT/WIS/CHA checks.
 
         Args:
-            target: ID of combatant making the check
+            target: Name or ID of character making the check (e.g., "Elara" or "pc_elara")
             ability: Ability to check (one of: "str", "dex", "con", "int", "wis", "cha")
             difficulty: Target number to beat (typically 10-20)
             modifier: Additional modifier to check roll
 
         Returns:
-            Check result with success/failure, roll details, and narrative
+            Check result with success/failure and roll details
         """
-        result = engine.roll_ability_check(target, ability, difficulty, modifier)
-        check_status = "SUCCESS" if result.success else "FAILURE"
+        from .dice import roll
+
+        # Validate ability
+        valid_abilities = ["str", "dex", "con", "int", "wis", "cha"]
+        if ability.lower() not in valid_abilities:
+            return f"Invalid ability: {ability}. Must be one of: {', '.join(valid_abilities)}"
+
+        # Roll d20
+        raw_roll = roll(1, 20, 0)
+        final_roll = raw_roll + modifier
+
+        # Natural 1 always fails
+        if raw_roll == 1:
+            return (
+                f"Ability check ({ability.upper()}) for {target}: {final_roll} vs DC {difficulty} = FAILURE\n"
+                f"(Natural 1 - automatic failure)"
+            )
+
+        # Natural 20 always succeeds
+        if raw_roll == 20:
+            return (
+                f"Ability check ({ability.upper()}) for {target}: {final_roll} vs DC {difficulty} = SUCCESS\n"
+                f"(Natural 20 - automatic success)"
+            )
+
+        # Normal roll
+        success = final_roll >= difficulty
+        status = "SUCCESS" if success else "FAILURE"
+        modifier_text = f" with modifier {modifier:+d}" if modifier != 0 else ""
+
         return (
-            f"Ability check ({ability.upper()}): {result.roll} vs needed {result.needed} = {check_status}\n"
-            f"(d20 roll with modifier {result.modifier:+d})\n"
-            f"{result.narrative}"
+            f"Ability check ({ability.upper()}) for {target}: {final_roll} vs DC {difficulty} = {status}\n"
+            f"(d20 rolled {raw_roll}{modifier_text})"
         )
 
     def roll_morale_tool(target: str) -> str:
