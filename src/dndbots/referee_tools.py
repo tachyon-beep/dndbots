@@ -393,6 +393,50 @@ def create_referee_tools(
             f"  Conditions: {conditions}"
         )
 
+    # Moment recording tool
+
+    async def record_moment_tool(
+        actor_id: str,
+        moment_type: str,
+        description: str,
+        target_id: str | None = None,
+    ) -> str:
+        """Record a noteworthy moment to the campaign history.
+
+        Use this for dramatic, creative, or memorable events that should be
+        remembered for future sessions. Examples:
+        - Creative tactics: "Throk swings from chandelier to kick goblin off ledge"
+        - Environmental actions: "Zara shoots the rope holding the portcullis"
+        - Dramatic reversals: "Elena catches the falling torch before it hits the oil"
+        - Tense moments: "The party holds their breath as the dragon sniffs the air"
+
+        When in doubt, record it. Missing a cool moment is worse than recording
+        a mediocre one.
+
+        Args:
+            actor_id: Character ID of who did the cool thing (e.g., "pc_throk")
+            moment_type: Type of moment - "creative", "environmental", "dramatic", "tense"
+            description: What happened, in 1-2 sentences
+            target_id: Optional target character ID if action was directed at someone
+
+        Returns:
+            Confirmation message
+        """
+        if neo4j and campaign_id:
+            turn = engine.current_turn if hasattr(engine, "current_turn") else 0
+            moment_id = await neo4j.record_moment(
+                campaign_id=campaign_id,
+                actor_id=actor_id,
+                moment_type=moment_type,
+                description=description,
+                session=session_id or "unknown",
+                turn=turn,
+                target_id=target_id,
+            )
+            return f"Moment recorded: {moment_id}. {description}"
+        else:
+            return f"Moment noted (not persisted): {description}"
+
     # Generic dice rolling tool
 
     def roll_dice_tool(notation: str, purpose: str = "") -> str:
@@ -448,4 +492,5 @@ def create_referee_tools(
         FunctionTool(remove_condition_tool, description=remove_condition_tool.__doc__),
         FunctionTool(get_combat_status_tool, description=get_combat_status_tool.__doc__),
         FunctionTool(get_combatant_tool, description=get_combatant_tool.__doc__),
+        FunctionTool(record_moment_tool, description=record_moment_tool.__doc__),
     ]
