@@ -18,6 +18,7 @@ from dndbots.output.plugins import ConsolePlugin
 from dndbots.rules_tools import create_rules_tools
 from dndbots.mechanics import MechanicsEngine
 from dndbots.referee_tools import create_referee_tools
+from dndbots.dm_tools import create_dm_tools
 
 
 def create_dm_agent(
@@ -25,6 +26,8 @@ def create_dm_agent(
     model: str = "gpt-4o",
     enable_rules_tools: bool = True,
     party_document: str | None = None,
+    neo4j: "Neo4jStore | None" = None,
+    campaign_id: str | None = None,
 ) -> AssistantAgent:
     """Create the Dungeon Master agent.
 
@@ -33,9 +36,11 @@ def create_dm_agent(
         model: OpenAI model to use
         enable_rules_tools: Enable rules lookup tools (default: True)
         party_document: Optional party background from Session Zero
+        neo4j: Optional Neo4jStore for narrative tools
+        campaign_id: Campaign ID for recording
 
     Returns:
-        Configured DM agent with optional rules tools
+        Configured DM agent with optional rules and narrative tools
     """
     model_client = OpenAIChatCompletionClient(model=model)
 
@@ -44,6 +49,11 @@ def create_dm_agent(
     if enable_rules_tools:
         lookup, list_rules, search = create_rules_tools()
         tools = [lookup, list_rules, search]
+
+    # Add DM narrative/query tools if Neo4j configured
+    if neo4j and campaign_id:
+        dm_tools = create_dm_tools(neo4j=neo4j, campaign_id=campaign_id)
+        tools.extend(dm_tools)
 
     return AssistantAgent(
         name="dm",
@@ -253,7 +263,16 @@ class DnDGame:
         self.mechanics_engine = MechanicsEngine()
 
         # Create agents
-        self.dm = create_dm_agent(scenario, dm_model, party_document=party_document)
+        neo4j_store = campaign._neo4j if campaign else None
+        campaign_id = campaign.campaign_id if campaign else None
+
+        self.dm = create_dm_agent(
+            scenario,
+            dm_model,
+            party_document=party_document,
+            neo4j=neo4j_store,
+            campaign_id=campaign_id,
+        )
 
         # Add update_party_document tool if party_document exists
         if self.party_document is not None:
@@ -263,12 +282,11 @@ class DnDGame:
         # Create Referee agent if enabled
         self.referee = None
         if enable_referee:
-            neo4j_store = campaign._neo4j if campaign else None
             self.referee = create_referee_agent(
                 self.mechanics_engine,
                 dm_model,
                 neo4j=neo4j_store,
-                campaign_id=campaign.campaign_id if campaign else None,
+                campaign_id=campaign_id,
                 session_id=campaign.current_session_id if campaign else None,
             )
 
