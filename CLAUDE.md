@@ -167,9 +167,31 @@ Prompts are in `prompts.py`. Key sections:
 
 See `docs/plans/` for detailed implementation plans.
 
+## Environment Variables
+
+**API keys are in `.env` at project root.** Always source it before running:
+
+```bash
+# Load environment variables
+source .env  # or: set -a && source .env && set +a
+
+# Required
+OPENAI_API_KEY=sk-...  # OpenAI API key
+
+# Optional
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=...
+```
+
+For Python scripts, use `python-dotenv` or export manually before running.
+
 ## Useful Commands
 
 ```bash
+# Load env and run game
+source .env && dndbots
+
 # Check database contents
 sqlite3 ~/.dndbots/campaigns.db "SELECT * FROM events LIMIT 5;"
 sqlite3 ~/.dndbots/campaigns.db "SELECT * FROM characters;"
