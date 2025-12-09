@@ -552,3 +552,111 @@ class Neo4jStore:
             records = await result.data()
 
         return [dict(r["m"]) for r in records]
+
+    # Session recap methods
+
+    async def get_session_moments(
+        self,
+        campaign_id: str,
+        session_id: str,
+    ) -> list[dict]:
+        """Get all moments from a specific session.
+
+        Args:
+            campaign_id: Campaign ID
+            session_id: Session ID
+
+        Returns:
+            List of moment dicts, ordered by turn
+        """
+        async with self._driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (m:Moment {campaign_id: $campaign_id, session: $session_id})
+                RETURN m
+                ORDER BY m.turn ASC
+                """,
+                campaign_id=campaign_id,
+                session_id=session_id,
+            )
+            records = await result.data()
+
+        return [dict(r["m"]) for r in records]
+
+    async def get_last_session_id(self, campaign_id: str) -> str | None:
+        """Get the most recent session ID for a campaign.
+
+        Args:
+            campaign_id: Campaign ID
+
+        Returns:
+            Session ID or None if no sessions
+        """
+        async with self._driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (m:Moment {campaign_id: $campaign_id})
+                RETURN DISTINCT m.session as session
+                ORDER BY m.session DESC
+                LIMIT 1
+                """,
+                campaign_id=campaign_id,
+            )
+            record = await result.single()
+
+        return record["session"] if record else None
+
+    async def mark_npc_encountered(
+        self,
+        npc_id: str,
+        session_id: str,
+        status: str = "neutral",
+    ) -> None:
+        """Mark an NPC as encountered in a session.
+
+        Args:
+            npc_id: NPC character ID
+            session_id: Session ID
+            status: Relationship status (friendly, hostile, neutral)
+        """
+        async with self._driver.session() as session:
+            await session.run(
+                """
+                MATCH (c:Character {char_id: $npc_id})
+                SET c.last_encountered = $session_id,
+                    c.encounter_status = $status
+                """,
+                npc_id=npc_id,
+                session_id=session_id,
+                status=status,
+            )
+
+    async def get_active_npcs(
+        self,
+        campaign_id: str,
+        session_id: str,
+    ) -> list[dict]:
+        """Get NPCs encountered in a session.
+
+        Args:
+            campaign_id: Campaign ID
+            session_id: Session ID
+
+        Returns:
+            List of NPC dicts with name, class, status
+        """
+        async with self._driver.session() as session:
+            result = await session.run(
+                """
+                MATCH (c:Character {campaign_id: $campaign_id})
+                WHERE c.last_encountered = $session_id
+                  AND c.char_id STARTS WITH 'npc_'
+                RETURN c.char_id as char_id, c.name as name,
+                       c.char_class as char_class, c.encounter_status as status
+                """,
+                campaign_id=campaign_id,
+                session_id=session_id,
+            )
+            records = await result.data()
+
+        return records
