@@ -197,7 +197,8 @@ class TestGameMemory:
         assert len(system_messages) > 0
         assert "Throk" in str(system_messages)
 
-    def test_build_player_memory_creates_dcml(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_build_player_memory_creates_dcml(self, monkeypatch):
         """_build_player_memory() creates DCML memory document."""
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
 
@@ -219,8 +220,8 @@ class TestGameMemory:
             enable_memory=True,
         )
 
-        # Call _build_player_memory
-        memory = game._build_player_memory(char)
+        # Call _build_player_memory (now async)
+        memory = await game._build_player_memory(char)
 
         # Verify DCML structure
         assert memory is not None
@@ -228,7 +229,8 @@ class TestGameMemory:
         assert "## MEMORY_pc_throk_001" in memory
         assert "Throk" in memory
 
-    def test_build_player_memory_disabled(self, monkeypatch):
+    @pytest.mark.asyncio
+    async def test_build_player_memory_disabled(self, monkeypatch):
         """_build_player_memory() returns None when memory disabled."""
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
 
@@ -250,8 +252,8 @@ class TestGameMemory:
             enable_memory=False,
         )
 
-        # Call _build_player_memory
-        memory = game._build_player_memory(char)
+        # Call _build_player_memory (now async)
+        memory = await game._build_player_memory(char)
 
         # Verify it returns None
         assert memory is None
@@ -629,9 +631,15 @@ class TestDnDGameRecapInjection:
 
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
 
+        # Mock neo4j with async methods for memory building
+        mock_neo4j = AsyncMock()
+        mock_neo4j.get_character_kills = AsyncMock(return_value=[])
+        mock_neo4j.get_witnessed_moments = AsyncMock(return_value=[])
+        mock_neo4j.get_known_entities = AsyncMock(return_value=[])
+
         # Mock campaign with recap
         mock_campaign = MagicMock()
-        mock_campaign._neo4j = MagicMock()
+        mock_campaign._neo4j = mock_neo4j
         mock_campaign.campaign_id = "test"
         mock_campaign.current_session_id = "session_001"
         mock_campaign.generate_session_recap = AsyncMock(
@@ -666,9 +674,15 @@ class TestDnDGameRecapInjection:
 
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
 
+        # Mock neo4j with async methods for memory building
+        mock_neo4j = AsyncMock()
+        mock_neo4j.get_character_kills = AsyncMock(return_value=[])
+        mock_neo4j.get_witnessed_moments = AsyncMock(return_value=[])
+        mock_neo4j.get_known_entities = AsyncMock(return_value=[])
+
         # Mock campaign without history
         mock_campaign = MagicMock()
-        mock_campaign._neo4j = MagicMock()
+        mock_campaign._neo4j = mock_neo4j
         mock_campaign.campaign_id = "test"
         mock_campaign.current_session_id = "session_001"
         mock_campaign.generate_session_recap = AsyncMock(return_value=None)

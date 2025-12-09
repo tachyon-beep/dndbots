@@ -310,16 +310,30 @@ class DnDGame:
         )
 
     async def initialize(self) -> None:
-        """Async initialization - inject recap into DM context."""
+        """Async initialization - inject recap and player memories."""
+        from autogen_core.models import SystemMessage
+
+        # Inject DM recap
         if self.campaign and self.campaign._neo4j:
             recap = await self.campaign.generate_session_recap()
             if recap:
                 # Update DM's system message
-                from autogen_core.models import SystemMessage
                 current_message = self.dm._system_messages[0].content
                 self.dm._system_messages[0] = SystemMessage(
                     content=f"{current_message}\n\n{recap}",
                 )
+
+        # Build player memories from graph
+        if self._memory_builder and self.campaign and self.campaign._neo4j:
+            for i, player in enumerate(self.players):
+                char = self.characters[i]
+                memory = await self._build_player_memory(char)
+                if memory:
+                    # Inject memory into player's system message
+                    current = player._system_messages[0].content
+                    player._system_messages[0] = SystemMessage(
+                        content=f"{current}\n\n{memory}",
+                    )
 
     async def run(self) -> None:
         """Run the game session.
@@ -404,8 +418,10 @@ class DnDGame:
             content=content,
         ))
 
-    def _build_player_memory(self, char: Character) -> str | None:
+    async def _build_player_memory(self, char: Character) -> str | None:
         """Build DCML memory for a player character.
+
+        Prefers Neo4j graph if available, falls back to event-based.
 
         Args:
             char: The character to build memory for
@@ -418,11 +434,18 @@ class DnDGame:
 
         char_id = getattr(char, 'char_id', None) or f"pc_{char.name.lower()}_001"
 
-        # Get events from campaign if available
+        # Use graph-based memory if Neo4j is available
+        if self.campaign and self.campaign._neo4j:
+            return await self._memory_builder.build_from_graph(
+                pc_id=char_id,
+                character=char,
+                neo4j=self.campaign._neo4j,
+            )
+
+        # Fallback to event-based memory
         events = []
         if self.campaign:
-            # TODO: Get events from campaign.get_session_events()
-            pass
+            events = await self.campaign.get_session_events()
 
         return self._memory_builder.build_memory_document(
             pc_id=char_id,
