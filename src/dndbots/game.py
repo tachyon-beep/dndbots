@@ -54,6 +54,27 @@ def create_dm_agent(
     )
 
 
+def sanitize_agent_name(name: str) -> str:
+    """Sanitize character name to be a valid Python identifier for AutoGen.
+
+    Args:
+        name: Character name (may include nicknames, quotes, etc.)
+
+    Returns:
+        Valid Python identifier (first name only, alphanumeric)
+    """
+    import re
+    # Extract first word before any quotes, parentheses, or "the"
+    # e.g., 'Thalia "The Wandering Shadow"' -> 'Thalia'
+    first_name = name.split()[0].split('"')[0].split("'")[0]
+    # Remove any non-alphanumeric characters
+    sanitized = re.sub(r'[^a-zA-Z0-9_]', '', first_name)
+    # Ensure it doesn't start with a number
+    if sanitized and sanitized[0].isdigit():
+        sanitized = '_' + sanitized
+    return sanitized or 'player'
+
+
 def create_player_agent(
     character: Character,
     model: str = "gpt-4o",
@@ -72,9 +93,10 @@ def create_player_agent(
         Configured player agent
     """
     model_client = OpenAIChatCompletionClient(model=model)
+    agent_name = sanitize_agent_name(character.name)
 
     return AssistantAgent(
-        name=character.name,
+        name=agent_name,
         model_client=model_client,
         system_message=build_player_prompt(character, memory=memory, party_document=party_document),
     )

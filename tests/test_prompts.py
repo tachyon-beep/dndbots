@@ -200,7 +200,8 @@ class TestRefereePrompt:
         """Referee prompt includes style guidelines."""
         prompt = build_referee_prompt()
         assert "STYLE" in prompt
-        assert "briefly" in prompt.lower() or "concise" in prompt.lower()
+        # Check for brevity guidance (terse, briefly, or concise)
+        assert "terse" in prompt.lower() or "briefly" in prompt.lower() or "concise" in prompt.lower()
 
     def test_referee_prompt_includes_monster_stats_guidance(self):
         """Referee prompt includes guidance on monster stats."""

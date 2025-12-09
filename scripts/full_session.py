@@ -40,6 +40,8 @@ async def main():
         num_players=3,
         dm_model="gpt-4o-mini",
         player_model="gpt-4o-mini",
+        campaign_theme="Classic dungeon crawl with ancient ruins and treasure",
+        session_notes="Keep Session Zero focused - aim for 10-15 messages total",
     )
 
     result = await sz.run()

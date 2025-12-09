@@ -1,6 +1,10 @@
 """Shared pytest fixtures."""
 
 import pytest
+from dotenv import load_dotenv
+
+# Load environment variables from .env file at test startup
+load_dotenv()
 
 
 @pytest.fixture

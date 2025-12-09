@@ -396,16 +396,25 @@ class SessionZero:
                 if scenario and party_document:
                     break
 
-        # Find each player's character (most recent only)
-        seen_players: set[str] = set()
+        # Find all [CHARACTER] blocks from all messages (players may output multiple)
+        seen_names: set[str] = set()
         for msg in reversed(transcript):
-            if msg.source.startswith("player_") and msg.source not in seen_players:
-                char = parse_character(get_content_as_string(msg))
+            content = get_content_as_string(msg)
+            # Find all CHARACTER blocks in this message
+            char_blocks = re.findall(
+                r"\[CHARACTER\]\s*(.*?)\s*\[/CHARACTER\]", content, re.DOTALL
+            )
+            for block in char_blocks:
+                # Parse the block by wrapping it back
+                char = parse_character(f"[CHARACTER]{block}[/CHARACTER]")
                 if char:
-                    characters.append(char)
-                    seen_players.add(msg.source)
+                    # Deduplicate by normalized name (first word, lowercase)
+                    norm_name = char.name.split()[0].lower()
+                    if norm_name not in seen_names:
+                        characters.append(char)
+                        seen_names.add(norm_name)
 
-        # Reverse to maintain player order
+        # Reverse to maintain order
         characters.reverse()
 
         return SessionZeroResult(
