@@ -30,7 +30,7 @@ class TestToolCreation:
     def test_create_referee_tools_returns_function_tools(self, engine):
         """Test that all tools are FunctionTool instances."""
         tools = create_referee_tools(engine)
-        assert len(tools) == 13
+        assert len(tools) == 14
         for tool in tools:
             assert isinstance(tool, FunctionTool)
 
