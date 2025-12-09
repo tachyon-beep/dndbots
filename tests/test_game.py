@@ -4,8 +4,9 @@ import os
 import pytest
 from unittest.mock import Mock
 
-from dndbots.game import create_dm_agent, create_player_agent, DnDGame, dm_selector
+from dndbots.game import create_dm_agent, create_player_agent, create_referee_agent, DnDGame, dm_selector
 from dndbots.models import Character, Stats
+from dndbots.mechanics import MechanicsEngine
 
 
 # Set dummy API key for testing
@@ -121,12 +122,12 @@ class TestDmSelector:
         result = dm_selector([])
         assert result == "dm"
 
-    def test_dm_selector_after_player_returns_dm(self):
-        """After player speaks, control returns to DM."""
+    def test_dm_selector_after_player_returns_referee(self):
+        """After player speaks, Referee resolves mechanics."""
         mock_message = Mock()
         mock_message.source = "Throk"
         result = dm_selector([mock_message])
-        assert result == "dm"
+        assert result == "referee"
 
     def test_dm_selector_after_dm_returns_none(self):
         """After DM speaks, let model selector determine next speaker."""
@@ -445,3 +446,175 @@ class TestUpdatePartyDocumentTool:
         assert "success" in result.lower()
         assert "New Plot Thread" in game.party_document
         assert "cult's true leader" in game.party_document
+
+
+class TestRefereeAgentCreation:
+    def test_create_referee_agent(self):
+        """Referee agent can be created with MechanicsEngine."""
+        engine = MechanicsEngine()
+        agent = create_referee_agent(engine, model="gpt-4o-mini")
+        assert agent.name == "referee"
+        # Check that tools are registered
+        assert len(agent._tools) > 0
+        tool_names = [t.name for t in agent._tools]
+        # Check for key mechanics tools
+        assert "start_combat_tool" in tool_names
+        assert "roll_attack_tool" in tool_names
+        assert "roll_damage_tool" in tool_names
+
+    def test_referee_agent_has_mechanics_tools(self):
+        """Referee agent has all expected mechanics tools."""
+        engine = MechanicsEngine()
+        agent = create_referee_agent(engine, model="gpt-4o-mini")
+
+        expected_tools = [
+            "start_combat_tool",
+            "add_combatant_tool",
+            "end_combat_tool",
+            "roll_attack_tool",
+            "roll_damage_tool",
+            "roll_save_tool",
+            "roll_ability_check_tool",
+            "roll_morale_tool",
+            "add_condition_tool",
+            "remove_condition_tool",
+            "get_combat_status_tool",
+            "get_combatant_tool",
+        ]
+
+        tool_names = [t.name for t in agent._tools]
+        for expected_tool in expected_tools:
+            assert expected_tool in tool_names
+
+
+class TestDmSelectorWithReferee:
+    def test_dm_selector_after_player_returns_referee(self):
+        """After player speaks, Referee should resolve mechanics."""
+        mock_message = Mock()
+        mock_message.source = "Throk"
+        result = dm_selector([mock_message])
+        assert result == "referee"
+
+    def test_dm_selector_after_referee_returns_dm(self):
+        """After Referee speaks, control returns to DM."""
+        mock_message = Mock()
+        mock_message.source = "referee"
+        result = dm_selector([mock_message])
+        assert result == "dm"
+
+    def test_dm_selector_after_dm_returns_none(self):
+        """After DM speaks, let model selector determine next speaker."""
+        mock_message = Mock()
+        mock_message.source = "dm"
+        result = dm_selector([mock_message])
+        assert result is None
+
+    def test_dm_selector_empty_messages_returns_dm(self):
+        """When no messages, DM should start."""
+        result = dm_selector([])
+        assert result == "dm"
+
+
+class TestDnDGameWithReferee:
+    def test_game_with_referee_enabled(self):
+        """Game initializes with Referee when enable_referee=True."""
+        char = Character(
+            name="Throk",
+            char_class="Fighter",
+            level=1,
+            hp=8,
+            hp_max=8,
+            ac=5,
+            stats=Stats(str=16, dex=12, con=14, int=9, wis=10, cha=11),
+            equipment=["longsword"],
+            gold=25,
+        )
+        game = DnDGame(
+            scenario="A goblin cave",
+            characters=[char],
+            dm_model="gpt-4o-mini",
+            player_model="gpt-4o-mini",
+            enable_referee=True,
+        )
+        assert game.referee is not None
+        assert game.referee.name == "referee"
+        assert game.mechanics_engine is not None
+
+    def test_game_with_referee_disabled(self):
+        """Game initializes without Referee when enable_referee=False."""
+        char = Character(
+            name="Throk",
+            char_class="Fighter",
+            level=1,
+            hp=8,
+            hp_max=8,
+            ac=5,
+            stats=Stats(str=16, dex=12, con=14, int=9, wis=10, cha=11),
+            equipment=["longsword"],
+            gold=25,
+        )
+        game = DnDGame(
+            scenario="A goblin cave",
+            characters=[char],
+            dm_model="gpt-4o-mini",
+            player_model="gpt-4o-mini",
+            enable_referee=False,
+        )
+        assert game.referee is None
+        # MechanicsEngine should still be initialized
+        assert game.mechanics_engine is not None
+
+    def test_game_referee_in_participants(self):
+        """Referee is in participants list when enabled."""
+        char = Character(
+            name="Throk",
+            char_class="Fighter",
+            level=1,
+            hp=8,
+            hp_max=8,
+            ac=5,
+            stats=Stats(str=16, dex=12, con=14, int=9, wis=10, cha=11),
+            equipment=["longsword"],
+            gold=25,
+        )
+        game = DnDGame(
+            scenario="A goblin cave",
+            characters=[char],
+            dm_model="gpt-4o-mini",
+            player_model="gpt-4o-mini",
+            enable_referee=True,
+        )
+        # Check that Referee is in the team participants
+        participant_names = [p.name for p in game.team._participants]
+        assert "dm" in participant_names
+        assert "referee" in participant_names
+        assert "Throk" in participant_names
+        # Verify order: DM, Referee, Players
+        assert participant_names[0] == "dm"
+        assert participant_names[1] == "referee"
+
+    def test_game_referee_not_in_participants_when_disabled(self):
+        """Referee is not in participants list when disabled."""
+        char = Character(
+            name="Throk",
+            char_class="Fighter",
+            level=1,
+            hp=8,
+            hp_max=8,
+            ac=5,
+            stats=Stats(str=16, dex=12, con=14, int=9, wis=10, cha=11),
+            equipment=["longsword"],
+            gold=25,
+        )
+        game = DnDGame(
+            scenario="A goblin cave",
+            characters=[char],
+            dm_model="gpt-4o-mini",
+            player_model="gpt-4o-mini",
+            enable_referee=False,
+        )
+        # Check that Referee is NOT in the team participants
+        participant_names = [p.name for p in game.team._participants]
+        assert "dm" in participant_names
+        assert "referee" not in participant_names
+        assert "Throk" in participant_names

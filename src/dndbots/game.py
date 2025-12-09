@@ -12,10 +12,12 @@ from dndbots.campaign import Campaign
 from dndbots.events import GameEvent, EventType
 from dndbots.memory import MemoryBuilder
 from dndbots.models import Character
-from dndbots.prompts import build_dm_prompt, build_player_prompt
+from dndbots.prompts import build_dm_prompt, build_player_prompt, build_referee_prompt
 from dndbots.output import EventBus, OutputEvent, OutputEventType
 from dndbots.output.plugins import ConsolePlugin
 from dndbots.rules_tools import create_rules_tools
+from dndbots.mechanics import MechanicsEngine
+from dndbots.referee_tools import create_referee_tools
 
 
 def create_dm_agent(
@@ -78,11 +80,38 @@ def create_player_agent(
     )
 
 
-def dm_selector(messages: Sequence) -> str | None:
-    """Custom selector: DM controls turn order.
+def create_referee_agent(
+    engine: MechanicsEngine,
+    model: str = "gpt-4o",
+) -> AssistantAgent:
+    """Create the Rules Referee agent.
 
-    After any player speaks, return to DM.
-    DM decides who goes next by addressing them.
+    Args:
+        engine: MechanicsEngine instance for mechanics resolution
+        model: OpenAI model to use
+
+    Returns:
+        Configured Referee agent with mechanics tools
+    """
+    model_client = OpenAIChatCompletionClient(model=model)
+    tools = create_referee_tools(engine)
+
+    return AssistantAgent(
+        name="referee",
+        model_client=model_client,
+        system_message=build_referee_prompt(),
+        tools=tools,
+        reflect_on_tool_use=True,  # Summarize tool output naturally
+    )
+
+
+def dm_selector(messages: Sequence) -> str | None:
+    """Custom selector: DM controls turn order with Referee for mechanics.
+
+    Turn order flow:
+    - After player speaks → Referee (for mechanical resolution)
+    - After Referee speaks → DM (to narrate consequences)
+    - After DM speaks → model decides next player
 
     Args:
         messages: Sequence of messages in the conversation
@@ -95,9 +124,13 @@ def dm_selector(messages: Sequence) -> str | None:
 
     last_speaker = messages[-1].source
 
-    # After player speaks, always return to DM
-    if last_speaker != "dm":
+    # After Referee speaks, return to DM
+    if last_speaker == "referee":
         return "dm"
+
+    # After player speaks, pass to Referee for mechanical resolution
+    if last_speaker != "dm" and last_speaker != "referee":
+        return "referee"
 
     # DM just spoke - let the model selector figure out who was addressed
     return None
@@ -156,6 +189,7 @@ class DnDGame:
         enable_memory: bool = True,
         event_bus: EventBus | None = None,
         party_document: str | None = None,
+        enable_referee: bool = True,
     ):
         """Initialize a game session.
 
@@ -168,6 +202,7 @@ class DnDGame:
             enable_memory: Enable DCML memory projection (default: True)
             event_bus: Optional event bus for output (default: ConsolePlugin)
             party_document: Optional party background from Session Zero
+            enable_referee: Enable Referee agent for mechanics (default: True)
         """
         self.scenario = scenario
         self.characters = characters
@@ -181,6 +216,9 @@ class DnDGame:
             event_bus.register(ConsolePlugin())
         self._event_bus = event_bus
 
+        # Initialize MechanicsEngine
+        self.mechanics_engine = MechanicsEngine()
+
         # Create agents
         self.dm = create_dm_agent(scenario, dm_model, party_document=party_document)
 
@@ -189,13 +227,21 @@ class DnDGame:
             update_tool = create_update_party_document_tool(self)
             self.dm._tools.append(update_tool)
 
+        # Create Referee agent if enabled
+        self.referee = None
+        if enable_referee:
+            self.referee = create_referee_agent(self.mechanics_engine, dm_model)
+
         self.players = [
             create_player_agent(char, player_model, party_document=party_document)
             for char in characters
         ]
 
-        # Build participant list (DM first)
-        participants = [self.dm] + self.players
+        # Build participant list (DM first, then Referee if enabled, then players)
+        participants = [self.dm]
+        if self.referee is not None:
+            participants.append(self.referee)
+        participants.extend(self.players)
 
         # Create the group chat with DM-controlled selection
         self.team = SelectorGroupChat(
@@ -272,6 +318,8 @@ class DnDGame:
         # Determine event type based on source
         if source == "dm":
             event_type = OutputEventType.NARRATION
+        elif source == "referee":
+            event_type = OutputEventType.SYSTEM
         elif source.startswith("pc_") or any(source == c.name for c in self.characters):
             event_type = OutputEventType.PLAYER_ACTION
         else:
