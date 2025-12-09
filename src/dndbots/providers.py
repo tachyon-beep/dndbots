@@ -8,7 +8,18 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from autogen_core.models import ModelFamily, ModelInfo
 from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+
+# Default model info for unknown models (assume modern LLM capabilities)
+DEFAULT_MODEL_INFO = ModelInfo(
+    vision=False,
+    function_calling=True,
+    json_output=True,
+    family=ModelFamily.UNKNOWN,
+    structured_output=True,
+)
 
 
 class Provider(Enum):
@@ -165,6 +176,11 @@ def create_model_client(
     # Add base_url if provider requires it
     if config.base_url:
         client_kwargs["base_url"] = config.base_url
+
+    # For non-OpenAI providers, we need to provide model_info
+    # since AutoGen doesn't know about OpenRouter model names
+    if provider != Provider.OPENAI and "model_info" not in client_kwargs:
+        client_kwargs["model_info"] = DEFAULT_MODEL_INFO
 
     return OpenAIChatCompletionClient(**client_kwargs)
 
