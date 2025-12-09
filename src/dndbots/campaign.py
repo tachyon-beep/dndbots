@@ -158,3 +158,67 @@ class Campaign:
             self.current_session_id, limit=None
         )
         return events[-limit:] if len(events) > limit else events
+
+    # Session recap
+
+    async def has_previous_session(self) -> bool:
+        """Check if campaign has any previous session history.
+
+        Returns:
+            True if there are recorded moments/events
+        """
+        if not self._neo4j:
+            return False
+
+        last_session = await self._neo4j.get_last_session_id(self.campaign_id)
+        return last_session is not None
+
+    async def generate_session_recap(self) -> str | None:
+        """Generate a recap of the previous session for DM context.
+
+        Returns:
+            Formatted recap string, or None if no history
+        """
+        if not self._neo4j:
+            return None
+
+        last_session = await self._neo4j.get_last_session_id(self.campaign_id)
+        if not last_session:
+            return None
+
+        # Get moments from last session
+        moments = await self._neo4j.get_session_moments(self.campaign_id, last_session)
+        if not moments:
+            return None
+
+        # Get active NPCs
+        npcs = await self._neo4j.get_active_npcs(self.campaign_id, last_session)
+
+        # Build recap
+        lines = [f"=== PREVIOUSLY ({last_session}) ==="]
+        lines.append("")
+
+        # Key moments
+        if moments:
+            lines.append("Key moments:")
+            for m in moments[:10]:  # Limit to 10 most important
+                moment_type = m.get("moment_type", "event")
+                description = m.get("description", "")
+                narrative = m.get("narrative", "")
+
+                if narrative:
+                    lines.append(f"- [{moment_type}] {narrative}")
+                else:
+                    lines.append(f"- [{moment_type}] {description}")
+            lines.append("")
+
+        # Active threads (NPCs)
+        if npcs:
+            lines.append("Active NPCs:")
+            for npc in npcs:
+                status = npc.get("status", "unknown")
+                name = npc.get("name", "Unknown")
+                lines.append(f"- {name} ({status})")
+            lines.append("")
+
+        return "\n".join(lines)
