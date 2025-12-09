@@ -17,6 +17,7 @@ class OutputEventType(Enum):
     # Mechanics
     DICE_ROLL = "dice_roll"         # Dice roll results
     COMBAT = "combat"               # Combat updates (damage, status)
+    REFEREE = "referee"             # Referee rulings and mechanics
 
     # System
     SYSTEM = "system"               # System messages

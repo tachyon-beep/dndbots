@@ -319,7 +319,7 @@ class DnDGame:
         if source == "dm":
             event_type = OutputEventType.NARRATION
         elif source == "referee":
-            event_type = OutputEventType.SYSTEM
+            event_type = OutputEventType.REFEREE
         elif source.startswith("pc_") or any(source == c.name for c in self.characters):
             event_type = OutputEventType.PLAYER_ACTION
         else:

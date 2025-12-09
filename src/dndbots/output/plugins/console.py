@@ -59,6 +59,8 @@ class ConsolePlugin:
 
         if event.event_type == OutputEventType.SYSTEM:
             return "[System]"
+        if event.event_type == OutputEventType.REFEREE:
+            return "[Referee]"
         if event.event_type == OutputEventType.DICE_ROLL:
             return "[Roll]"
         if event.event_type == OutputEventType.ERROR:
