@@ -181,6 +181,7 @@ class MechanicsEngine:
         self.combat: CombatState | None = None
         self.pcs: dict[str, Combatant] = {}
         self.debug_mode = debug_mode
+        self._turn_count = 0
 
     # Combat lifecycle methods
 
@@ -197,6 +198,17 @@ class MechanicsEngine:
             raise ValueError("Combat already in progress")
 
         self.combat = CombatState(combat_style=style)
+        self._turn_count = 0
+
+    def advance_turn(self) -> int:
+        """Advance to next turn and return turn number."""
+        self._turn_count += 1
+        return self._turn_count
+
+    @property
+    def current_turn(self) -> int:
+        """Get current turn number."""
+        return self._turn_count
 
     def add_combatant(
         self,
