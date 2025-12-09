@@ -57,11 +57,21 @@ async def run_game(session_zero: bool = False) -> None:
     # Ensure data directory exists
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Build Neo4j config if environment variables are set
+    neo4j_config = None
+    if os.getenv("NEO4J_URI"):
+        neo4j_config = {
+            "uri": os.getenv("NEO4J_URI"),
+            "username": os.getenv("NEO4J_USER", "neo4j"),
+            "password": os.getenv("NEO4J_PASSWORD", ""),
+        }
+
     # Initialize campaign
     campaign = Campaign(
         campaign_id="default_campaign",
         name="Caves of Chaos",
         db_path=str(DEFAULT_DB),
+        neo4j_config=neo4j_config,
     )
     await campaign.initialize()
 
