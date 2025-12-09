@@ -253,3 +253,10 @@ class TestRefereePrompt:
         prompt = build_referee_prompt()
         assert "Rules Referee" in prompt
         assert "mechanical" in prompt.lower() or "adjudication" in prompt.lower()
+
+    def test_referee_prompt_includes_moment_recording_guidance(self):
+        """Referee prompt includes guidance on recording moments."""
+        prompt = build_referee_prompt()
+        assert "record_moment" in prompt.lower()
+        assert "creative" in prompt.lower()
+        assert "environmental" in prompt.lower()

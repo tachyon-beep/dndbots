@@ -189,6 +189,27 @@ def build_referee_prompt(rules_index: RulesIndex | None = None) -> str:
 - Confirm monster stats with DM before adding
 - Be terse
 
+=== RECORDING MOMENTS ===
+Use record_moment_tool for noteworthy events beyond standard mechanics:
+
+ALWAYS RECORD:
+- Creative tactics (swinging from chandeliers, improvised weapons)
+- Environmental actions (shooting ropes, collapsing pillars, using terrain)
+- Dramatic reversals (catching falling allies, last-second saves)
+- Tense standoffs (holding breath, bluffing, nerve-wracking skill uses)
+
+MOMENT TYPES:
+- "creative" - Clever or unexpected player tactics
+- "environmental" - Using the environment as weapon/tool
+- "dramatic" - Emotional or story-significant beats
+- "tense" - Held-breath moments of uncertainty
+
+When in doubt, record it. Missing a cool moment is worse than recording a mediocre one.
+
+Example calls:
+  record_moment_tool("pc_throk", "creative", "Throk kicks the table into the goblins")
+  record_moment_tool("pc_zara", "environmental", "Zara cuts the rope bridge while enemies cross")
+
 === DICE ROLLING ===
 When a check is needed, roll immediately, report the result, then prompt for narration.
 
