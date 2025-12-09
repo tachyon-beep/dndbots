@@ -1,11 +1,14 @@
 """Memory projection for DCML - builds per-PC memory views from canonical state."""
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from dndbots.dcml import DCMLCategory, DCMLOp, render_lexicon_entry, render_relation
 from dndbots.events import GameEvent, EventType
 from dndbots.models import Character
+
+if TYPE_CHECKING:
+    from dndbots.storage.neo4j_store import Neo4jStore
 
 
 # Class abbreviations for compact DCML
@@ -231,3 +234,95 @@ class MemoryBuilder:
         sections.append(memory)
 
         return "\n\n".join(sections)
+
+    async def build_from_graph(
+        self,
+        pc_id: str,
+        character: Character,
+        neo4j: "Neo4jStore",
+        party_id: str | None = None,
+    ) -> str:
+        """Build DCML memory from Neo4j graph.
+
+        Args:
+            pc_id: Player character ID
+            character: Character object
+            neo4j: Neo4jStore instance
+            party_id: Optional party faction ID
+
+        Returns:
+            DCML formatted memory document
+        """
+        # Query graph for character's knowledge
+        kills = await neo4j.get_character_kills(pc_id)
+        moments = await neo4j.get_witnessed_moments(pc_id)
+        known_entities = await neo4j.get_known_entities(pc_id)
+
+        # Build LEXICON from known entities
+        lexicon_lines = ["## LEXICON"]
+        lexicon_lines.append(render_lexicon_entry(DCMLCategory.PC, pc_id, character.name))
+
+        for entity in known_entities:
+            entity_id = entity["entity_id"]
+            name = entity["name"]
+            entity_type = entity["entity_type"]
+
+            if entity_type == "character":
+                if entity_id.startswith("pc_"):
+                    cat = DCMLCategory.PC
+                else:
+                    cat = DCMLCategory.NPC
+            elif entity_type == "location":
+                cat = DCMLCategory.LOC
+            elif entity_type == "faction":
+                cat = DCMLCategory.FAC
+            else:
+                continue
+
+            lexicon_lines.append(render_lexicon_entry(cat, entity_id, name))
+
+        # Build MEMORY section
+        memory_lines = [f"## MEMORY_{pc_id}", ""]
+
+        # Identity
+        memory_lines.append("# Identity & role")
+        if party_id:
+            memory_lines.append(f"{pc_id} in {party_id};")
+
+        class_abbrev = CLASS_ABBREV.get(character.char_class, character.char_class[:3].upper())
+        memory_lines.append(f"{pc_id}::class->{class_abbrev},level->{character.level};")
+
+        s = character.stats
+        stats_str = f"STR{s.str},DEX{s.dex},CON{s.con},INT{s.int},WIS{s.wis},CHA{s.cha}"
+        memory_lines.append(f"{pc_id}::stats->{stats_str};")
+
+        # Kills
+        if kills:
+            memory_lines.append("")
+            memory_lines.append("# Kills")
+            for kill in kills:
+                target = kill["target_id"]
+                weapon = kill.get("weapon", "weapon")
+                narrative = kill.get("narrative", "")
+
+                line = f"{pc_id} -> KILLED:{target} ({weapon})"
+                if narrative:
+                    line += f' "{narrative}"'
+                memory_lines.append(line)
+
+        # Recent moments
+        if moments:
+            memory_lines.append("")
+            memory_lines.append("# Recent events")
+            for m in moments[:self.event_window]:
+                mtype = m.get("moment_type", "event")
+                desc = m.get("description", "")
+                narrative = m.get("narrative", "")
+
+                if narrative:
+                    memory_lines.append(f"[{mtype}] {narrative}")
+                else:
+                    memory_lines.append(f"[{mtype}] {desc}")
+
+        # Combine sections
+        return "\n".join(lexicon_lines) + "\n\n" + "\n".join(memory_lines)
