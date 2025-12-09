@@ -1,6 +1,17 @@
 """Mechanics and combat state dataclasses for the Referee agent."""
 
 from dataclasses import dataclass, field
+from enum import Enum, auto
+
+
+class CombatTrigger(Enum):
+    """Noteworthy combat events that should be recorded."""
+
+    KILL = auto()
+    OVERKILL = auto()
+    CRIT_HIT = auto()
+    CRIT_FAIL = auto()
+    CLUTCH_SAVE = auto()
 
 
 @dataclass
@@ -766,3 +777,117 @@ class MechanicsEngine:
         if combatant is None:
             raise ValueError(f"Combatant {target} not found")
         return list(combatant.conditions)
+
+    # Trigger detection methods
+
+    def apply_damage(
+        self,
+        target_id: str,
+        damage: int,
+        source: str | None = None,
+    ) -> dict[CombatTrigger, dict]:
+        """Apply damage to a combatant and detect triggers.
+
+        Args:
+            target_id: ID of target taking damage
+            damage: Amount of damage
+            source: ID of damage source (attacker)
+
+        Returns:
+            Dict of triggered events with details
+        """
+        if self.combat is None:
+            return {}
+
+        combatant = self.combat.combatants.get(target_id)
+        if not combatant:
+            return {}
+
+        triggers = {}
+        hp_before = combatant.hp
+
+        # Apply damage
+        combatant.hp = max(0, combatant.hp - damage)
+
+        # Check for kill
+        if combatant.hp <= 0 and hp_before > 0:
+            triggers[CombatTrigger.KILL] = {
+                "attacker": source,
+                "target": target_id,
+                "damage": damage,
+            }
+
+            # Check for overkill (damage >= 2x remaining HP)
+            if damage >= 2 * hp_before:
+                triggers[CombatTrigger.OVERKILL] = {
+                    "attacker": source,
+                    "target": target_id,
+                    "damage": damage,
+                    "hp_was": hp_before,
+                }
+
+        return triggers
+
+    def check_attack_triggers(
+        self,
+        roll: int,
+        attacker: str,
+        target: str,
+    ) -> dict[CombatTrigger, dict]:
+        """Check for attack roll triggers.
+
+        Args:
+            roll: Natural d20 roll (before modifiers)
+            attacker: Attacker ID
+            target: Target ID
+
+        Returns:
+            Dict of triggered events
+        """
+        triggers = {}
+
+        if roll == 20:
+            triggers[CombatTrigger.CRIT_HIT] = {
+                "attacker": attacker,
+                "target": target,
+                "roll": roll,
+            }
+        elif roll == 1:
+            triggers[CombatTrigger.CRIT_FAIL] = {
+                "attacker": attacker,
+                "roll": roll,
+            }
+
+        return triggers
+
+    def check_save_triggers(
+        self,
+        roll: int,
+        needed: int,
+        character: str,
+        save_type: str,
+    ) -> dict[CombatTrigger, dict]:
+        """Check for saving throw triggers.
+
+        Args:
+            roll: The d20 roll result
+            needed: Target number needed
+            character: Character ID
+            save_type: Type of save (death, wands, etc.)
+
+        Returns:
+            Dict of triggered events
+        """
+        triggers = {}
+
+        # Clutch save: made it by 1-2 points
+        if roll >= needed and (roll - needed) <= 2:
+            triggers[CombatTrigger.CLUTCH_SAVE] = {
+                "character": character,
+                "save_type": save_type,
+                "roll": roll,
+                "needed": needed,
+                "margin": roll - needed,
+            }
+
+        return triggers
