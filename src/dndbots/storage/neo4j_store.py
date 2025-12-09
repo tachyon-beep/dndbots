@@ -1,5 +1,7 @@
 """Neo4j graph store for entity relationships."""
 
+import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from neo4j import AsyncGraphDatabase
@@ -226,3 +228,228 @@ class Neo4jStore:
         if not record:
             return None
         return dict(record["l"])
+
+    # Moment recording
+
+    async def record_kill(
+        self,
+        campaign_id: str,
+        attacker_id: str,
+        target_id: str,
+        weapon: str,
+        damage: int,
+        session: str,
+        turn: int,
+        narrative: str = "",
+    ) -> str:
+        """Record a kill with KILLED relationship and Moment node.
+
+        Args:
+            campaign_id: Campaign identifier
+            attacker_id: Character ID of attacker
+            target_id: Character ID of target (victim)
+            weapon: Weapon used
+            damage: Damage dealt
+            session: Session ID
+            turn: Turn number
+            narrative: Optional narrative description
+
+        Returns:
+            moment_id of the created Moment node
+        """
+        moment_id = f"moment_{uuid.uuid4().hex[:12]}"
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        async with self._driver.session() as db_session:
+            # Create Moment node
+            await db_session.run(
+                """
+                CREATE (m:Moment {
+                    moment_id: $moment_id,
+                    campaign_id: $campaign_id,
+                    moment_type: 'kill',
+                    session: $session,
+                    turn: $turn,
+                    description: $description,
+                    timestamp: $timestamp,
+                    narrative: $narrative
+                })
+                """,
+                moment_id=moment_id,
+                campaign_id=campaign_id,
+                session=session,
+                turn=turn,
+                description=f"{attacker_id} killed {target_id} with {weapon} for {damage} damage",
+                timestamp=timestamp,
+                narrative=narrative,
+            )
+
+            # Create KILLED relationship with properties
+            await db_session.run(
+                """
+                MATCH (a:Character {char_id: $attacker_id})
+                MATCH (t:Character {char_id: $target_id})
+                MERGE (a)-[r:KILLED]->(t)
+                SET r.moment_id = $moment_id,
+                    r.weapon = $weapon,
+                    r.damage = $damage,
+                    r.session = $session,
+                    r.turn = $turn,
+                    r.timestamp = $timestamp,
+                    r.narrative = $narrative
+                """,
+                attacker_id=attacker_id,
+                target_id=target_id,
+                moment_id=moment_id,
+                weapon=weapon,
+                damage=damage,
+                session=session,
+                turn=turn,
+                timestamp=timestamp,
+                narrative=narrative,
+            )
+
+            # Link attacker to moment (PERFORMED)
+            await db_session.run(
+                """
+                MATCH (a:Character {char_id: $attacker_id})
+                MATCH (m:Moment {moment_id: $moment_id})
+                MERGE (a)-[:PERFORMED]->(m)
+                """,
+                attacker_id=attacker_id,
+                moment_id=moment_id,
+            )
+
+        return moment_id
+
+    async def record_moment(
+        self,
+        campaign_id: str,
+        actor_id: str,
+        moment_type: str,
+        description: str,
+        session: str,
+        turn: int,
+        narrative: str = "",
+        target_id: str | None = None,
+    ) -> str:
+        """Record a generic noteworthy moment.
+
+        Args:
+            campaign_id: Campaign identifier
+            actor_id: Character ID of the actor
+            moment_type: Type (crit_hit, crit_fail, clutch_save, creative, etc.)
+            description: Mechanical description
+            session: Session ID
+            turn: Turn number
+            narrative: Optional narrative description
+            target_id: Optional target character ID
+
+        Returns:
+            moment_id of the created Moment node
+        """
+        moment_id = f"moment_{uuid.uuid4().hex[:12]}"
+        timestamp = datetime.now(timezone.utc).isoformat()
+
+        async with self._driver.session() as db_session:
+            # Create Moment node
+            await db_session.run(
+                """
+                CREATE (m:Moment {
+                    moment_id: $moment_id,
+                    campaign_id: $campaign_id,
+                    moment_type: $moment_type,
+                    session: $session,
+                    turn: $turn,
+                    description: $description,
+                    timestamp: $timestamp,
+                    narrative: $narrative
+                })
+                """,
+                moment_id=moment_id,
+                campaign_id=campaign_id,
+                moment_type=moment_type,
+                session=session,
+                turn=turn,
+                description=description,
+                timestamp=timestamp,
+                narrative=narrative,
+            )
+
+            # Link actor to moment (PERFORMED)
+            await db_session.run(
+                """
+                MATCH (a:Character {char_id: $actor_id})
+                MATCH (m:Moment {moment_id: $moment_id})
+                MERGE (a)-[:PERFORMED]->(m)
+                """,
+                actor_id=actor_id,
+                moment_id=moment_id,
+            )
+
+            # If target specified, create appropriate relationship
+            if target_id and moment_type == "crit_hit":
+                await db_session.run(
+                    """
+                    MATCH (a:Character {char_id: $actor_id})
+                    MATCH (t:Character {char_id: $target_id})
+                    MATCH (m:Moment {moment_id: $moment_id})
+                    MERGE (a)-[r:CRITTED {moment_id: $moment_id}]->(t)
+                    MERGE (t)-[:WITNESSED]->(m)
+                    """,
+                    actor_id=actor_id,
+                    target_id=target_id,
+                    moment_id=moment_id,
+                )
+
+        return moment_id
+
+    async def get_moment(self, moment_id: str) -> dict | None:
+        """Get a Moment node by ID."""
+        async with self._driver.session() as session:
+            result = await session.run(
+                "MATCH (m:Moment {moment_id: $moment_id}) RETURN m",
+                moment_id=moment_id,
+            )
+            record = await result.single()
+
+        if not record:
+            return None
+        return dict(record["m"])
+
+    async def get_character_moments(
+        self,
+        char_id: str,
+        moment_type: str | None = None,
+        limit: int = 10,
+    ) -> list[dict]:
+        """Get moments performed by a character.
+
+        Args:
+            char_id: Character ID
+            moment_type: Optional filter by type
+            limit: Max results
+
+        Returns:
+            List of moment dicts
+        """
+        type_filter = "AND m.moment_type = $moment_type" if moment_type else ""
+
+        query = f"""
+            MATCH (c:Character {{char_id: $char_id}})-[:PERFORMED]->(m:Moment)
+            WHERE true {type_filter}
+            RETURN m
+            ORDER BY m.timestamp DESC
+            LIMIT $limit
+        """
+
+        async with self._driver.session() as session:
+            result = await session.run(
+                query,
+                char_id=char_id,
+                moment_type=moment_type,
+                limit=limit,
+            )
+            records = await result.data()
+
+        return [dict(r["m"]) for r in records]
