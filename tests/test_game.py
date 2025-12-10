@@ -4,7 +4,7 @@ import os
 import pytest
 from unittest.mock import Mock
 
-from dndbots.game import create_dm_agent, create_player_agent, create_referee_agent, DnDGame, dm_selector
+from dndbots.game import create_dm_agent, create_player_agent, create_referee_agent, DnDGame, dm_selector, _parse_addressed_player
 from dndbots.models import Character, Stats
 from dndbots.mechanics import MechanicsEngine
 
@@ -714,3 +714,122 @@ class TestDnDGameRecapInjection:
         # DM message should not contain recap
         dm_message = game.dm._system_messages[0].content
         assert "PREVIOUSLY" not in dm_message
+
+
+class TestParseAddressedPlayer:
+    """Tests for _parse_addressed_player function."""
+
+    def test_parse_what_do_you_do_pattern(self):
+        """Parses 'What do you do, Name?' pattern."""
+        mock_message = Mock()
+        mock_message.content = "The goblin snarls at you. What do you do, Kaelen?"
+
+        mock_participant = Mock()
+        mock_participant.name = "Kaelen"
+
+        result = _parse_addressed_player(mock_message, [mock_participant])
+        assert result == "Kaelen"
+
+    def test_parse_bold_name_pattern(self):
+        """Parses '**Name**' bold pattern."""
+        mock_message = Mock()
+        mock_message.content = "**Kaelen**, the goblin charges at you!"
+
+        mock_participant = Mock()
+        mock_participant.name = "Kaelen"
+
+        result = _parse_addressed_player(mock_message, [mock_participant])
+        assert result == "Kaelen"
+
+    def test_parse_name_at_start_with_comma(self):
+        """Parses 'Name,' at start of message."""
+        mock_message = Mock()
+        mock_message.content = "Kaelen, what do you see?"
+
+        mock_participant = Mock()
+        mock_participant.name = "Kaelen"
+
+        result = _parse_addressed_player(mock_message, [mock_participant])
+        assert result == "Kaelen"
+
+    def test_excludes_dm_and_referee(self):
+        """Does not match 'dm' or 'referee' as addressed players."""
+        mock_message = Mock()
+        mock_message.content = "**dm**, what happens next?"
+
+        mock_dm = Mock()
+        mock_dm.name = "dm"
+        mock_referee = Mock()
+        mock_referee.name = "referee"
+        mock_player = Mock()
+        mock_player.name = "Kaelen"
+
+        result = _parse_addressed_player(mock_message, [mock_dm, mock_referee, mock_player])
+        assert result is None  # Should not match dm
+
+    def test_returns_none_when_no_match(self):
+        """Returns None when no player is addressed."""
+        mock_message = Mock()
+        mock_message.content = "The cave is dark and quiet."
+
+        mock_participant = Mock()
+        mock_participant.name = "Kaelen"
+
+        result = _parse_addressed_player(mock_message, [mock_participant])
+        assert result is None
+
+    def test_handles_list_content(self):
+        """Handles message content that is a list."""
+        mock_message = Mock()
+        mock_message.content = ["What do you do, ", "Kaelen?"]
+
+        mock_participant = Mock()
+        mock_participant.name = "Kaelen"
+
+        result = _parse_addressed_player(mock_message, [mock_participant])
+        assert result == "Kaelen"
+
+
+class TestDmSelectorWithParticipants:
+    """Tests for dm_selector with participant-based name parsing."""
+
+    def test_dm_selector_parses_addressed_player(self):
+        """When DM addresses a specific player, selector returns that player."""
+        mock_dm_message = Mock()
+        mock_dm_message.source = "dm"
+        mock_dm_message.content = "What do you do, Kaelen?"
+
+        mock_dm = Mock()
+        mock_dm.name = "dm"
+        mock_referee = Mock()
+        mock_referee.name = "referee"
+        mock_player = Mock()
+        mock_player.name = "Kaelen"
+
+        participants = [mock_dm, mock_referee, mock_player]
+        result = dm_selector([mock_dm_message], participants)
+        assert result == "Kaelen"
+
+    def test_dm_selector_returns_none_without_participants(self):
+        """Without participants, falls back to None for model selection."""
+        mock_dm_message = Mock()
+        mock_dm_message.source = "dm"
+        mock_dm_message.content = "What do you do, Kaelen?"
+
+        result = dm_selector([mock_dm_message])
+        assert result is None
+
+    def test_dm_selector_returns_none_when_no_match(self):
+        """When no player is addressed, returns None for model selection."""
+        mock_dm_message = Mock()
+        mock_dm_message.source = "dm"
+        mock_dm_message.content = "The cave grows darker."
+
+        mock_dm = Mock()
+        mock_dm.name = "dm"
+        mock_player = Mock()
+        mock_player.name = "Kaelen"
+
+        participants = [mock_dm, mock_player]
+        result = dm_selector([mock_dm_message], participants)
+        assert result is None

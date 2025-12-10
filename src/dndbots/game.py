@@ -154,17 +154,18 @@ def create_referee_agent(
     )
 
 
-def dm_selector(messages: Sequence) -> str | None:
+def dm_selector(messages: Sequence, participants: list | None = None) -> str | None:
     """Custom selector: DM controls turn order with Referee for mechanics.
 
     Turn order flow:
     - After initial task (user) → DM (to set the scene)
     - After player speaks → Referee (for mechanical resolution)
     - After Referee speaks → DM (to narrate consequences)
-    - After DM speaks → model decides next player
+    - After DM speaks → parse message for addressed player, else model decides
 
     Args:
         messages: Sequence of messages in the conversation
+        participants: List of participant agents (used to match player names)
 
     Returns:
         Agent name to speak next, or None to use model-based selection
@@ -186,7 +187,63 @@ def dm_selector(messages: Sequence) -> str | None:
     if last_speaker != "dm" and last_speaker != "referee":
         return "referee"
 
-    # DM just spoke - let the model selector figure out who was addressed
+    # DM just spoke - try to parse who was addressed
+    if participants:
+        addressed = _parse_addressed_player(messages[-1], participants)
+        if addressed:
+            return addressed
+
+    # Fall back to model-based selection
+    return None
+
+
+def _parse_addressed_player(message, participants: list) -> str | None:
+    """Parse DM message to find which player was explicitly addressed.
+
+    Looks for patterns like:
+    - "What do you do, Kaelen?"
+    - "Kaelen, what do you do?"
+    - "**Kaelen**, the goblin..."
+
+    Args:
+        message: The DM's message
+        participants: List of participant agents
+
+    Returns:
+        Agent name if found, None otherwise
+    """
+    import re
+
+    content = getattr(message, 'content', '')
+    if isinstance(content, list):
+        content = ' '.join(str(c) for c in content)
+
+    # Get player names (exclude dm and referee)
+    player_names = [
+        p.name for p in participants
+        if p.name not in ('dm', 'referee')
+    ]
+
+    if not player_names:
+        return None
+
+    # Build pattern to match player names (case-insensitive)
+    # Matches: "Name," or "**Name**" or "Name?" at word boundaries
+    for name in player_names:
+        # Check for direct address patterns at end of message
+        # "What do you do, Name?" or "Name, what do you do?"
+        patterns = [
+            rf'\b{re.escape(name)}\s*\?\s*$',  # "...Name?" at end
+            rf',\s*{re.escape(name)}\s*[.?!]?\s*$',  # "..., Name." at end
+            rf'\*\*{re.escape(name)}\*\*',  # **Name** (bold)
+            rf'^{re.escape(name)},',  # "Name," at start
+            rf'What do you do,?\s*{re.escape(name)}',  # Direct question
+        ]
+
+        for pattern in patterns:
+            if re.search(pattern, content, re.IGNORECASE):
+                return name
+
     return None
 
 
@@ -319,11 +376,15 @@ class DnDGame:
             participants.append(self.referee)
         participants.extend(self.players)
 
+        # Create selector with participant context for name parsing
+        def selector_with_participants(messages: Sequence) -> str | None:
+            return dm_selector(messages, participants)
+
         # Create the group chat with DM-controlled selection
         self.team = SelectorGroupChat(
             participants=participants,
             model_client=create_model_client(provider=self.provider, model=dm_model),
-            selector_func=dm_selector,
+            selector_func=selector_with_participants,
             termination_condition=TextMentionTermination("SESSION PAUSE"),
         )
 
