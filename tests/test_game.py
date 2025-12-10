@@ -517,6 +517,13 @@ class TestDmSelectorWithReferee:
         result = dm_selector([])
         assert result == "dm"
 
+    def test_dm_selector_after_user_returns_dm(self):
+        """After initial task message from user, DM should respond."""
+        mock_message = Mock()
+        mock_message.source = "user"
+        result = dm_selector([mock_message])
+        assert result == "dm"
+
 
 class TestDnDGameWithReferee:
     def test_game_with_referee_enabled(self):

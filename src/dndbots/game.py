@@ -158,6 +158,7 @@ def dm_selector(messages: Sequence) -> str | None:
     """Custom selector: DM controls turn order with Referee for mechanics.
 
     Turn order flow:
+    - After initial task (user) → DM (to set the scene)
     - After player speaks → Referee (for mechanical resolution)
     - After Referee speaks → DM (to narrate consequences)
     - After DM speaks → model decides next player
@@ -172,6 +173,10 @@ def dm_selector(messages: Sequence) -> str | None:
         return "dm"
 
     last_speaker = messages[-1].source
+
+    # Initial task message comes from "user" - DM should respond first
+    if last_speaker == "user":
+        return "dm"
 
     # After Referee speaks, return to DM
     if last_speaker == "referee":
